@@ -7,8 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Reference Include="Wizard">
-        <HintPath>..\..\..\addons\wizard\bin\Wizard.dll</HintPath>
+      <Reference Include="Wand">
+        <HintPath>..\..\..\bin\Wand.dll</HintPath>
       </Reference>
     </ItemGroup>
 

@@ -15,10 +15,10 @@ std::vector<std::string> Split(const std::string& str, char sep) {
 }
 
 int main() {
-    wizard::PluginManager& pluginManager = wizard::PluginManager::Get();
+    wand::PluginManager& pluginManager = wand::PluginManager::Get();
     pluginManager.loadAll();
 
-    std::cout << "wzd <command> [arguments]" << std::endl;
+    std::cout << "wand <command> [arguments]" << std::endl;
 
     bool running = true;
     while (running) {
@@ -31,8 +31,8 @@ int main() {
         if (args[0] == "exit") {
             running = false;
         } else if (args[0] == "help") {
-            std::cout << "Wizard Menu" << std::endl;
-            std::cout << "usage: wzd <command> [arguments]" << std::endl;
+            std::cout << "wand Menu" << std::endl;
+            std::cout << "usage: wand <command> [arguments]" << std::endl;
             //std::cout << "  alias        - List or set an alias" << std::endl;
             //std::cout << "  clear        - Unload all plugins forcefully" << std::endl;
             //std::cout << "  cmds         - Show plugin commands" << std::endl;
@@ -49,7 +49,7 @@ int main() {
             //std::cout << "  unload       - Unload a loaded plugin" << std::endl;
             //std::cout << "  unpause      - Unpause a paused plugin" << std::endl;
             //std::cout << "  version      - Version information" << std::endl;
-        } else if (args[0] == "wzd" && args.size() > 1) {
+        } else if (args[0] == "wand" && args.size() > 1) {
             if (args[1] == "list") {
                 const char separator = ' ';
                 const int nameWidth = 20;

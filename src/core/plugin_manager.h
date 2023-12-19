@@ -11,7 +11,7 @@ extern "C" {
     typedef struct _MonoDomain MonoDomain;
 }
 
-namespace wizard {
+namespace wand {
     using PluginId = uint64_t;
 
     namespace utils {
@@ -119,8 +119,8 @@ namespace wizard {
 
         PluginList plugins;
 
-        fs::path corePath{ "../addons/wizard/bin/Wizard.dll" };
-        fs::path pluginsPath{ "../addons/wizard/plugins/" };
+        fs::path corePath{ "../bin/Wand.dll" };
+        fs::path pluginsPath{ "../bin/" };
 
         friend class PluginInstance;
 

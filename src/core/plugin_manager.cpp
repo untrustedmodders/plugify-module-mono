@@ -11,9 +11,9 @@
 
 using namespace std::string_literals;
 
-using namespace wizard;
+using namespace wand;
 
-namespace wizard::utils {
+namespace wand::utils {
     MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB) {
         MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
         MonoImage* image = nullptr;
@@ -98,7 +98,7 @@ void PluginManager::initMono() {
         mono_debug_init(MONO_DEBUG_FORMAT_MONO);
     }
 
-    rootDomain = mono_jit_init("WizardJITRuntime");
+    rootDomain = mono_jit_init("WandJITRuntime");
     assert(rootDomain);
 
     if (enableDebugging)
@@ -126,7 +126,7 @@ void PluginManager::loadAll() {
         return;
 
     // Create an app domain
-    char appName[] = "WizardMonoRuntime";
+    char appName[] = "WandMonoRuntime";
     appDomain = mono_domain_create_appdomain(appName, nullptr);
     mono_domain_set(appDomain, true);
 
@@ -199,7 +199,7 @@ PluginInstance* PluginManager::findPlugin(std::string_view name) {
 }
 
 MonoClass* PluginManager::cacheCoreClass(const char* name) {
-	MonoClass* klass = mono_class_from_name(coreImage, "Wizard", name);
+	MonoClass* klass = mono_class_from_name(coreImage, "Wand", name);
 	assert(klass);
 	coreClasses.emplace(name, klass);
 	return klass;

@@ -1,5 +1,5 @@
 ﻿using System;
-using Wizard;
+using Wand;
 
 namespace Plugin2
 {

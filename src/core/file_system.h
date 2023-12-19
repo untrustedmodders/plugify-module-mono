@@ -2,7 +2,7 @@
 
 #include <fstream>
 
-namespace wizard {
+namespace wand {
     class FileSystem {
     public:
         template<typename T>

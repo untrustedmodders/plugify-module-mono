@@ -5,10 +5,10 @@ import subprocess
 base_directory = ".."
 
 # Set the core library
-core_library = os.path.join(base_directory, "addons", "wizard", "bin", "wizard.dll")
+core_library = os.path.join(base_directory, "bin", "wand.dll")
 
-# Check if the "../addons/wizard/plugins" directory exists, and create it if not
-target_directory = os.path.join(base_directory, "addons", "wizard", "plugins")
+# Check if the "../bin" directory exists, and create it if not
+target_directory = os.path.join(base_directory, "bin")
 if not os.path.exists(target_directory):
     os.makedirs(target_directory)
 
