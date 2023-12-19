@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <cstring>
+#include <sstream>
 #include <memory>
 #include <cassert>
 #include <filesystem>
