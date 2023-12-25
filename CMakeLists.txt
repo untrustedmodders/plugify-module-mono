@@ -1,41 +1,20 @@
-cmake_minimum_required(VERSION 3.21)
-project(csharplm)
+cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
 
-# Force all compilers to use the correct C and C++ standard versions.
-# Needed to allow for CheckCXXSourceCompiles to work correctly.
-set(CMAKE_REQUIRED_FLAGS "-std=c++20 -std=c11")
+project(csharp-lang-module)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
 
-# Speed up building on MinGW
-if(WIN32)
-    add_link_options(-fuse-ld=lld)
-endif()
+#
+# CPP Language Module for Wizard
+#
+file(GLOB_RECURSE CPPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(MONO REQUIRED mono-2)
+add_library(${PROJECT_NAME} SHARED ${CPPLM_SOURCES})
 
-file(GLOB_RECURSE CSHARPLM_SRC_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/core/*.cpp")
-file(GLOB_RECURSE CSHARP_HDR_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/core/*.h")
-set(CSHARPLM_PCH_FILE "src/pch.h")
+target_include_directories(${PROJECT_NAME} PRIVATE "external/wizard/include")
 
-add_executable(${PROJECT_NAME} ${CSHARPLM_SRC_FILES} ${CSHARPLM_HDR_FILES})
-
-include_directories(SYSTEM "${MONO_INCLUDE_DIRS}")
-target_link_directories(${PROJECT_NAME} PUBLIC ${MONO_LIBRARY_DIRS})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${MONO_LIBRARIES})
-target_precompile_headers(${PROJECT_NAME} PUBLIC ${CSHARPLM_PCH_FILE})
-
-if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
-else()
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wshadow -Wconversion -Wpedantic -Werror)
-endif()
-
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-        ${CMAKE_CURRENT_SOURCE_DIR}/mono
-        ${CMAKE_CURRENT_BINARY_DIR}/mono)
+include(GenerateExportHeader)
+generate_export_header(${PROJECT_NAME} EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
