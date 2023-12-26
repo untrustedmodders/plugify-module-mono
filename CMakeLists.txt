@@ -49,15 +49,24 @@ if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
                         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     endfunction()
 
+    set(BUILD_FOLDER ${CMAKE_BINARY_DIR}/bin)
+    file(MAKE_DIRECTORY ${BUILD_FOLDER}/)
+
     # Compile Wand
     file(GLOB_RECURSE WAND_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Wand/Wand/src/*.cs")
     string(REPLACE ";" " " WAND_LIST "${WAND_SOURCES}")
-    csc_compilation(Wand "bin/Wand.dll" ${WAND_LIST} "-target:library")
+    csc_compilation(Wand "${BUILD_FOLDER}/Wand.dll" ${WAND_LIST} "-target:library")
 
     # Compile Sample Plugins
     file(GLOB_RECURSE PLUGIN_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Plugins/Plugins/src/*.cs")
     foreach(PLUGIN_SOURCE ${PLUGIN_SOURCES})
         get_filename_component(PLUGIN_NAME ${PLUGIN_SOURCE} NAME_WLE)
-        csc_compilation(${PLUGIN_NAME} "bin/${PLUGIN_NAME}.dll" ${PLUGIN_SOURCE} " -target:library -reference:bin/Wand.dll")
+        set(PLUGIN_PATH "bin/${PLUGIN_NAME}.dll")
+
+        file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME})
+        file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME}/bin)
+
+        csc_compilation(${PLUGIN_NAME} "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_PATH}" ${PLUGIN_SOURCE} " -target:library -reference:${BUILD_FOLDER}/Wand.dll")
+        configure_file("plugin.wplugin.in" "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_NAME}.wplugin")
     endforeach()
 endif()

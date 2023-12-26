@@ -8,3 +8,7 @@
 #include <utility>
 #include <functional>
 #include <optional>
+#include <span>
+
+#include <filesystem>
+namespace fs = std::filesystem;
