@@ -44,11 +44,11 @@ namespace csharplm {
 
     CSharpLanguageModule g_cpplm;
 
-    CSHARP_LANG_MODULE_EXPORT void* GetNativeMethod(std::string_view method_name) {
+    CSHARPLM_EXPORT void* GetNativeMethod(std::string_view method_name) {
 		return g_cpplm.GetNativeMethod(method_name);
 	}
 }
 
-extern "C" CSHARP_LANG_MODULE_EXPORT ILanguageModule* GetLanguageModule() {
+extern "C" CSHARPLM_EXPORT ILanguageModule* GetLanguageModule() {
 	return &csharplm::g_cpplm;
 }
