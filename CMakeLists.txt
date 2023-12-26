@@ -15,6 +15,11 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(MONO REQUIRED mono-2)
 
 #
+# Options
+#
+option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
+
+#
 # C# Language Module for Wizard
 #
 file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
@@ -36,20 +41,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
 # Wand Core for C# plugin
 #
 find_program(PYTHON_EXECUTABLE NAMES "python")
-if(PYTHON_EXECUTABLE)
+if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
     function(csc_compilation name out sources args)
         set(MAKE_CMD "csc ${args} -out:${out} ${sources}")
         message("COMMAND: ${MAKE_CMD}")
-        #execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import subprocess; subprocess.run('${MAKE_CMD}', shell=True)"
-       #         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-        add_custom_command(
-                TARGET ${PROJECT_NAME}
-                POST_BUILD
-                COMMAND ${PYTHON_EXECUTABLE} -c "import subprocess; subprocess.run('${MAKE_CMD}', shell=True)"
-                COMMENT "Executing post-build step"
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                VERBATIM
-        )
+        execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import subprocess; subprocess.run('${MAKE_CMD}', shell=True)"
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     endfunction()
 
     # Compile Wand
