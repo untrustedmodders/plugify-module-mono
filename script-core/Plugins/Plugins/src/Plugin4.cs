@@ -10,32 +10,32 @@ namespace Plugin4
          */
         void OnCreate()
         {
-            Console.Write("Plugin4: OnCreate\n");
+            Console.Write($"{Name}: OnCreate\n");
         }
 
         /**
-         * Called when the plugin is fully initialized and all known external dependencies.
-         * This is only called once in the lifetime of the plugin, and is paired with OnEnd().
-         */
+		 * Called when the plugin is fully initialized and all known external dependencies.
+		 * This is only called once in the lifetime of the plugin, and is paired with OnEnd().
+		 */
         void OnStart()
         {
-            Console.Write("Plugin4: OnStart\n");
+            Console.Write($"{Name}: OnStart\n");
         }
 
         /**
-         * Called when the plugin is about to be unloading and all known external dependencies are still exist.
-         */
+		 * Called when the plugin is about to be unloading and all known external dependencies are still exist.
+		 */
         void OnEnd()
         {
-            Console.Write("Plugin4: OnEnd\n");
+            Console.Write($"{Name}: OnEnd\n");
         }
 
         /**
-         * Called when the plugin is about to be destroy.
-         */
+		 * Called when the plugin is about to be destroy.
+		 */
         void OnDestroy()
         {
-            Console.Write("Plugin4: OnDestroy\n");
+            Console.Write($"{Name}: OnDestroy\n");
         }
     }
 }

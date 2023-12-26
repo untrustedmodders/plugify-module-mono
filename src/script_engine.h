@@ -85,6 +85,7 @@ namespace csharplm {
         void EndScript(const wizard::IPlugin& plugin);
 
         MonoString* CreateString(std::string_view string) const;
+        MonoArray* CreateArray(MonoClass *klass, size_t count) const;
         MonoObject* InstantiateClass(MonoClass* klass) const;
 
     private:

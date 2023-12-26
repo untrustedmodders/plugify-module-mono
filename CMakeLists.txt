@@ -38,7 +38,7 @@ generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
 
 #
-# Wand Core for C# plugin
+# Wand Core for C# plugins (Building with csc command directly might not work everywhere)
 #
 find_program(PYTHON_EXECUTABLE NAMES "python")
 if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)

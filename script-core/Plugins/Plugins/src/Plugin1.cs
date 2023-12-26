@@ -10,7 +10,7 @@ namespace Plugin1
          */
         void OnCreate()
         {
-            Console.Write("Plugin1: OnCreate\n");
+            Console.Write($"{Name}: OnCreate\n");
         }
 
 		/**
@@ -19,7 +19,7 @@ namespace Plugin1
 		 */
 		void OnStart()
 		{
-			Console.Write("Plugin1: OnStart\n");
+			Console.Write($"{Name}: OnStart\n");
 		}
 
 		/**
@@ -27,7 +27,7 @@ namespace Plugin1
 		 */
 		void OnEnd()
 		{
-			Console.Write("Plugin1: OnEnd\n");
+			Console.Write($"{Name}: OnEnd\n");
 		}
 
 		/**
@@ -35,7 +35,7 @@ namespace Plugin1
 		 */
 		void OnDestroy()
 		{
-			Console.Write("Plugin1: OnDestroy\n");
+			Console.Write($"{Name}: OnDestroy\n");
 		}
     }
 }

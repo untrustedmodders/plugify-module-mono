@@ -6,16 +6,37 @@ namespace Wand
 {
     public class Plugin : IEquatable<Plugin>, IComparable<Plugin>
     {
-        public readonly ulong Id;
+        public ulong Id { get; } 
+        public string Name { get; }
+        public string FullName { get; }
+        public string Description { get; }
+        public string Version { get; }
+        public string Author { get; }
+        public string Website { get; }
+        public string[] Dependencies { get; }
 
         protected Plugin()
         {
             Id = ulong.MaxValue;
+            Name = string.Empty;
+            FullName = string.Empty;
+            Description = string.Empty;
+            Version = string.Empty;
+            Author = string.Empty;
+            Website = string.Empty;
+            Dependencies = Array.Empty<string>();
         }
 
-        internal Plugin(ulong id)
+        internal Plugin(ulong id, string name, string fullName, string description, string version, string author, string website, string[] dependencies)
         {
             Id = id;
+            Name = name;
+            FullName = fullName;
+            Description = description;
+            Version = version;
+            Author = author;
+            Website = website;
+            Dependencies = dependencies;
         }
 
         public Plugin? FindPluginByName(string name)

@@ -1,7 +1,8 @@
 #include "script_engine.h"
 
-#include <wizard/plugin.h>
 #include <wizard/module.h>
+#include <wizard/plugin.h>
+#include <wizard/plugin_descriptor.h>
 
 #include <iostream>
 #include <cassert>
@@ -58,8 +59,8 @@ namespace csharplm::utils {
             uint32_t cols[MONO_TYPEDEF_SIZE];
             mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
 
-            std::string_view nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
-            std::string_view name = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
+            const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
+            const char* name = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
 
             std::cout << nameSpace << "." << name << std::endl;
         }
@@ -73,10 +74,10 @@ namespace csharplm::utils {
     }
 }
 
-bool ScriptEngine::Initialize(const wizard::IModule& module) {
-    InitMono(module.GetBaseDir() / "mono/lib");
+bool ScriptEngine::Initialize(const wizard::IModule& m) {
+    InitMono(m.GetBaseDir() / "mono/lib");
 
-    fs::path coreAssemblyPath{ module.GetBinariesDir() / "Wand.dll" };
+    fs::path coreAssemblyPath{ m.GetBinariesDir() / "Wand.dll" };
 
     // Create an app domain
     char appName[] = "WandMonoRuntime";
@@ -100,7 +101,7 @@ bool ScriptEngine::Initialize(const wizard::IModule& module) {
 
     /// Plugin
     MonoClass* pluginClass = CacheCoreClass("Plugin");
-    CacheCoreMethod(pluginClass, ".ctor", 1);
+    CacheCoreMethod(pluginClass, ".ctor", 8);
 
     return true;
 }
@@ -115,7 +116,7 @@ void ScriptEngine::InitMono(const fs::path& monoPath) {
     mono_set_assemblies_path(monoPath.string().c_str());
 
     if (_enableDebugging) {
-        std::string_view argv[2] = {
+        const char* argv[2] = {
             "--debugger-agent=transport=dt_socket,address=127.0.0.1:2550,server=y,suspend=n,loglevel=3,logfile=MonoDebugger.log",
             "--soft-breakpoints"
         };
@@ -181,6 +182,10 @@ MonoMethod* ScriptEngine::FindCoreMethod(const std::string& name) const {
 
 MonoString* ScriptEngine::CreateString(std::string_view string) const {
     return mono_string_new(_appDomain, string.data());
+}
+
+MonoArray* ScriptEngine::CreateArray(MonoClass *klass, size_t count) const {
+    return mono_array_new(_appDomain, klass, count);
 }
 
 MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
@@ -253,10 +258,23 @@ ScriptInstance::ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin
     {
         MonoMethod* constructor = _engine.FindCoreMethod(".ctor");
         assert(constructor);
+        const auto& desc = _plugin.GetDescriptor();
         ScriptId id = _plugin.GetId();
-        // TODO: Which additional info we need to pass to ctor ?
-        void* param = &id;
-        mono_runtime_invoke(constructor, _instance, &param, nullptr);
+        MonoArray* deps = _engine.CreateArray(mono_get_string_class(), desc.dependencies.size());
+        for (size_t i = 0; i < desc.dependencies.size(); ++i) {
+            mono_array_set(deps, MonoString*, i,  _engine.CreateString(desc.dependencies[i].name));
+        }
+        std::array<void*, 8> args{
+            &id,
+            _engine.CreateString(_plugin.GetName()),
+            _engine.CreateString(_plugin.GetFriendlyName()),
+            _engine.CreateString(desc.friendlyName),
+            _engine.CreateString(desc.versionName),
+            _engine.CreateString(desc.createdBy),
+            _engine.CreateString(desc.createdByURL),
+            deps
+        };
+        mono_runtime_invoke(constructor, _instance, args.data(), nullptr);
     }
 
     CacheMethod("OnCreate", 0);
