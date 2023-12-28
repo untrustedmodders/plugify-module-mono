@@ -14,6 +14,10 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MONO REQUIRED mono-2)
 
+set(WIZARD_BUILD_DLL ON CACHE INTERNAL "")
+set(WIZARD_BUILD_SHARED_LIB ON CACHE INTERNAL "")
+add_subdirectory(external/wizard)
+
 #
 # Options
 #
@@ -27,10 +31,9 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
-target_include_directories(${PROJECT_NAME} PRIVATE "external/wizard/include")
 include_directories(SYSTEM "${MONO_INCLUDE_DIRS}")
 target_link_directories(${PROJECT_NAME} PUBLIC ${MONO_LIBRARY_DIRS})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${MONO_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${MONO_LIBRARIES} wizard)
 target_precompile_headers(${PROJECT_NAME} PUBLIC ${CSHARPLM_PCH_FILE})
 
 include(GenerateExportHeader)
