@@ -4,6 +4,7 @@
 #include <mono/jit/jit.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/object.h>
+#include <mono/metadata/class.h>
 #include <mono/metadata/attrdefs.h>
 #include <mono/metadata/mono-debug.h>
 #include <mono/metadata/threads.h>
@@ -22,16 +23,18 @@ extern "C" {
 namespace wizard {
     class IModule;
     class IPlugin;
+    class Function;
+    struct Method;
+    struct Parameters;
+    struct ReturnValue;
+}
+
+namespace asmjit { inline namespace _abi_1_11 {
+        class JitRuntime;
+    }
 }
 
 namespace csharplm {
-
-    namespace utils {
-        MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB = false);
-
-        [[maybe_unused]] [[maybe_unused]] void PrintAssemblyTypes(MonoAssembly* assembly);
-        std::string MonoStringToString(MonoString* string);
-    }
 
     class ScriptEngine;
 
@@ -58,6 +61,7 @@ namespace csharplm {
         MonoClass* _klass{ nullptr };
         MonoObject* _instance{ nullptr };
         std::unordered_map<std::string, MonoMethod*> _methods;
+        std::vector<wizard::Function> _functions; // asmjit generated
 
         friend class ScriptEngine;
     };
@@ -76,7 +80,7 @@ namespace csharplm {
         const ScriptMap& GetScriptMap() const { return _scripts; }
         ScriptRef FindScript(const std::string& name);
 
-        bool LoadScript(const wizard::IPlugin& plugin);
+        wizard::LoadResult LoadScript(const wizard::IPlugin& plugin);
         void StartScript(const wizard::IPlugin& plugin);
         void EndScript(const wizard::IPlugin& plugin);
 
@@ -89,11 +93,15 @@ namespace csharplm {
         void InitMono(const fs::path& monoPath);
         void ShutdownMono();
 
+        ScriptRef CreateScriptInstance(const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image);
+
         MonoClass* CacheCoreClass(std::string name);
         MonoMethod* CacheCoreMethod(MonoClass* klass, std::string name, int params);
 
         MonoClass* FindCoreClass(const std::string& name) const;
         MonoMethod* FindCoreMethod(const std::string& name) const;
+
+        static void FunctionCallback(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* retVal);
 
     private:
         MonoDomain* _rootDomain{ nullptr };
@@ -106,6 +114,8 @@ namespace csharplm {
         std::unordered_map<std::string, MonoMethod*> _coreMethods;
 
         ScriptMap _scripts;
+
+        std::shared_ptr<asmjit::JitRuntime> _rt;
 
 #ifdef _DEBUG
         bool _enableDebugging{ true };

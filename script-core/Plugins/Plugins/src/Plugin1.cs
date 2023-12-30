@@ -37,5 +37,11 @@ namespace Plugin1
 		{
 			Console.Write($"{Name}: OnDestroy\n");
 		}
+
+		public static int MyExportFunction(int a, float b, double c)
+		{
+		    Console.Write("I believe that what doesn't kill you makes you... stranger!!! \n");
+		    return 1337;
+		}
     }
 }

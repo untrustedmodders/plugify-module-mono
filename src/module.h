@@ -28,8 +28,7 @@ namespace csharplm {
         }
 
         wizard::LoadResult OnPluginLoad(const wizard::IPlugin& plugin) override {
-            _scriptEngine.LoadScript(plugin);
-            return {};
+            return _scriptEngine.LoadScript(plugin);
         }
 
         void OnPluginStart(const wizard::IPlugin& plugin) override {

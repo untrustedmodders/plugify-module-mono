@@ -4,16 +4,19 @@
 #include <wizard/module.h>
 #include <wizard/plugin.h>
 #include <wizard/plugin_descriptor.h>
+#include <wizard/function.h>
+#include <asmjit/asmjit.h>
 
 //#include <iostream>
 #include <cassert>
 #include <fstream>
+#include <cstring>
 
 using namespace csharplm;
 
 namespace csharplm::utils {
     template<typename T>
-    static inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
+    inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
         std::ifstream istream{file, std::ios::binary};
         if (!istream)
             return false;
@@ -22,8 +25,7 @@ namespace csharplm::utils {
         return true;
     }
 
-    MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB) {
-        MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+    MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
         MonoImage* image = nullptr;
 
         ReadBytes<char>(assemblyPath, [&image, &status](std::span<char> buffer) {
@@ -31,7 +33,6 @@ namespace csharplm::utils {
         });
 
         if (status != MONO_IMAGE_OK) {
-            std::cout << "Failed to load assembly file: " << mono_image_strerror(status) << std::endl;
             return nullptr;
         }
 
@@ -39,10 +40,11 @@ namespace csharplm::utils {
             fs::path pdbPath{ assemblyPath };
             pdbPath.replace_extension(".pdb");
 
-            ReadBytes<mono_byte>(pdbPath, [&image, &pdbPath](std::span<mono_byte> buffer) {
+            ReadBytes<mono_byte>(pdbPath, [&image](std::span<mono_byte> buffer) {
                 mono_debug_open_image_from_memory(image, buffer.data(), static_cast<int>(buffer.size()));
-                std::cout << "Loaded PDB: " << pdbPath.string() << std::endl;
             });
+
+            // If pdf not load ?
         }
 
         MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
@@ -72,12 +74,59 @@ namespace csharplm::utils {
         mono_free(cStr);
         return str;
     }
+
+    wizard::ValueType MonoTypeToValueType(const char* typeName) {
+        using enum wizard::ValueType;
+        static std::unordered_map<std::string_view, wizard::ValueType> valueTypeMap = {
+            { "System.Void", Void },
+            { "System.Boolean", Bool },
+            { "System.Char", Char8 },
+            { "System.SByte", Int8 },
+            { "System.Int16", Int16 },
+            { "System.Int32", Int32 },
+            { "System.Int64", Int64 },
+            { "System.Byte", Uint8 },
+            { "System.UInt16", Uint16 },
+            { "System.UInt32", Uint32 },
+            { "System.UInt64", Uint64 },
+            { "System.IntPtr", Ptr64 },
+            { "System.UIntPtr", Ptr64 },
+            { "System.Single", Float },
+            { "System.Double", Double },
+            { "System.String", String },
+        };
+        auto it = valueTypeMap.find(typeName);
+        if (it != valueTypeMap.end())
+            return it->second;
+        return Invalid;
+    }
+
+    std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
+        std::vector<std::string_view> output;
+        size_t first = 0;
+
+        while (first < strv.size()) {
+            const size_t second = strv.find_first_of(delims, first);
+
+            if (first != second)
+                output.emplace_back(strv.substr(first, second-first));
+
+            if (second == std::string_view::npos)
+                break;
+
+            first = second + 1;
+        }
+
+        return output;
+    }
 }
 
 wizard::InitResult ScriptEngine::Initialize(const wizard::IModule& mod) {
     InitMono(mod.GetBaseDir() / "mono/lib");
 
     ScriptGlue::RegisterFunctions();
+
+    _rt = std::make_shared<asmjit::JitRuntime>();
 
     // Create an app domain
     char appName[] = "WandMonoRuntime";
@@ -87,9 +136,10 @@ wizard::InitResult ScriptEngine::Initialize(const wizard::IModule& mod) {
     fs::path coreAssemblyPath{ mod.GetBinariesDir() / "Wand.dll" };
 
     // Load a core assembly
-    _coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging);
+    MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+    _coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging, status);
     if (!_coreAssembly)
-        return wizard::ErrorData{std::format("Could not load '{}' core assembly.", coreAssemblyPath.string())};
+        return wizard::ErrorData{std::format("Could not load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
 
     _coreImage = mono_assembly_get_image(_coreAssembly);
     if (!_coreImage)
@@ -100,9 +150,11 @@ wizard::InitResult ScriptEngine::Initialize(const wizard::IModule& mod) {
     /// Plugin
     MonoClass* pluginClass = CacheCoreClass("Plugin");
     if (!pluginClass)
-        return wizard::ErrorData{"Could not "};
+        return wizard::ErrorData{std::format("Could not find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string())};
 
-    CacheCoreMethod(pluginClass, ".ctor", 8);
+    MonoMethod* pluginCtor = CacheCoreMethod(pluginClass, ".ctor", 8);
+    if (!pluginCtor)
+        return wizard::ErrorData{std::format("Could not find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string())};
 
     return {};
 }
@@ -204,21 +256,95 @@ MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
     return instance;
 }
 
-bool ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
-    MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _enableDebugging);
+void ScriptEngine::FunctionCallback(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* ret) {
+
+}
+
+wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
+    MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+    MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _enableDebugging, status);
     if (!assembly)
-        return false;
+        return wizard::ErrorData{std::format("Could not load '{}' plugin assembly. Reason: {}", plugin.GetFilePath().string(), mono_image_strerror(status))};
 
     MonoImage* image = mono_assembly_get_image(assembly);
     if (!image)
-        return false;
+        return wizard::ErrorData{std::format("Could not load '{}' plugin image.", plugin.GetFilePath().string())};
+
+    auto script = CreateScriptInstance(plugin, assembly, image);
+    if (!script.has_value())
+        return wizard::ErrorData{std::format("Could not find 'Plugin' class implementation! Check '{}' assembly!", plugin.GetFilePath().string())};
+
+    auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
+    wizard::LoadResultData loadResult;
+    loadResult.methods.reserve(exportedMethods.size());
+
+    asmjit::JitRuntime rt;
+
+    for (const auto& method : exportedMethods) {
+        auto seperated = utils::Split(method.name, ".");
+        if (seperated.size() != 3)
+            return wizard::ErrorData{};
+
+        // Name of function in format "Plugin.Namespace.Class.Method"
+        std::string nameSpace{ seperated[0] };
+        std::string className{ seperated[1] };
+        std::string methodName{ seperated[2] };
+
+        MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
+        if (!monoClass)
+            return wizard::ErrorData{"Error TODO: !"};
+
+        int paramCount = static_cast<int>(method.paramTypes.size());
+        MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), paramCount);
+        if (!monoMethod)
+            return wizard::ErrorData{"Error TODO: !"};
+
+        MonoMethodSignature* sig = mono_method_signature(monoMethod);
+
+        char* returnType = mono_type_get_name(mono_signature_get_return_type(sig));
+        if (utils::MonoTypeToValueType(returnType) != method.retType) {
+            continue;
+        }
+
+        size_t i = 0;
+        void* iter = nullptr;
+        while (MonoType* type = mono_signature_get_params(sig, &iter)) {
+            char* paramType = mono_type_get_name(type);
+            if (utils::MonoTypeToValueType(paramType) != method.paramTypes[i++]) {
+                continue;
+            }
+        }
+
+        script->get()._methods[method.name] = monoMethod;
+        auto& function = script->get()._functions.emplace_back(_rt);
+
+        auto jit = function.GetJitFunc(method, FunctionCallback);
+
+        loadResult.methods.emplace_back(std::format("{}.{}", plugin.GetName(), method.name), jit);
+    }
+
+    return loadResult;
+}
+
+void ScriptEngine::StartScript(const wizard::IPlugin& plugin) {
+    ScriptRef script = FindScript(plugin.GetName());
+    if (script.has_value()) {
+        script->get().Invoke("OnStart");
+    }
+}
+
+void ScriptEngine::EndScript(const wizard::IPlugin& plugin) {
+    ScriptRef script = FindScript(plugin.GetName());
+    if (script.has_value()) {
+        script->get().Invoke("OnEnd");
+    }
+}
+
+ScriptRef ScriptEngine::CreateScriptInstance(const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image) {
+    MonoClass* pluginClass = FindCoreClass("Plugin");
 
     const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
     int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
-
-    MonoClass* pluginClass = FindCoreClass("Plugin");
-
-    bool success = false;
 
     for (int i = 0; i < numTypes; ++i) {
         uint32_t cols[MONO_TYPEDEF_SIZE];
@@ -235,26 +361,10 @@ bool ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
         if (!isPlugin)
             continue;
 
-        _scripts.emplace(plugin.GetName(), ScriptInstance{ *this, plugin, assembly, image, monoClass });
-
-        success = true;
+        return _scripts.emplace(plugin.GetName(), ScriptInstance{ *this, plugin, assembly, image, monoClass }).first->second;
     }
 
-    return success;
-}
-
-void ScriptEngine::StartScript(const wizard::IPlugin& plugin) {
-    ScriptRef script = FindScript(plugin.GetName());
-    if (script.has_value()) {
-        script->get().Invoke("OnStart");
-    }
-}
-
-void ScriptEngine::EndScript(const wizard::IPlugin& plugin) {
-    ScriptRef script = FindScript(plugin.GetName());
-    if (script.has_value()) {
-        script->get().Invoke("OnEnd");
-    }
+    return std::nullopt;
 }
 
 /*_________________________________________________*/
