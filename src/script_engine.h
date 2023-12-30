@@ -1,5 +1,6 @@
 #pragma once
 
+#include <wizard/language_module.h>
 #include <mono/jit/jit.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/object.h>
@@ -24,11 +25,11 @@ namespace wizard {
 }
 
 namespace csharplm {
-    using ScriptId = uint64_t;
 
     namespace utils {
         MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB = false);
-        void PrintAssemblyTypes(MonoAssembly* assembly);
+
+        [[maybe_unused]] [[maybe_unused]] void PrintAssemblyTypes(MonoAssembly* assembly);
         std::string MonoStringToString(MonoString* string);
     }
 
@@ -49,12 +50,9 @@ namespace csharplm {
 
     private:
         MonoMethod* CacheMethod(std::string name, int params);
-        MonoMethod* CacheVirtualMethod(std::string name);
+        //MonoMethod* CacheVirtualMethod(std::string name);
 
     private:
-        const ScriptEngine& _engine;
-        const wizard::IPlugin& _plugin;
-
         MonoAssembly* _assembly{ nullptr };
         MonoImage* _image{ nullptr };
         MonoClass* _klass{ nullptr };
@@ -64,7 +62,7 @@ namespace csharplm {
         friend class ScriptEngine;
     };
 
-    using ScriptMap = std::unordered_map<ScriptId, ScriptInstance>;
+    using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
     using ScriptRef = std::optional<std::reference_wrapper<ScriptInstance>>;
 
     class ScriptEngine {
@@ -72,20 +70,19 @@ namespace csharplm {
         ScriptEngine() = default;
         ~ScriptEngine() = default;
 
-        bool Initialize(const wizard::IModule& module);
+        wizard::InitResult Initialize(const wizard::IModule& module);
         void Shutdown();
 
         const ScriptMap& GetScriptMap() const { return _scripts; }
-        size_t GetScriptCount() const { return _scripts.size(); }
-
-        ScriptRef FindScript(ScriptId id);
+        ScriptRef FindScript(const std::string& name);
 
         bool LoadScript(const wizard::IPlugin& plugin);
         void StartScript(const wizard::IPlugin& plugin);
         void EndScript(const wizard::IPlugin& plugin);
 
         MonoString* CreateString(std::string_view string) const;
-        MonoArray* CreateArray(MonoClass *klass, size_t count) const;
+        MonoArray* CreateArray(MonoClass* klass, size_t count) const;
+        MonoArray* CreateStringArray(MonoClass* klass, std::span<std::string_view> source) const;
         MonoObject* InstantiateClass(MonoClass* klass) const;
 
     private:

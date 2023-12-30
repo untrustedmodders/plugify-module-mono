@@ -1,14 +1,14 @@
 #include "script_engine.h"
+#include "script_glue.h"
 
 #include <wizard/module.h>
 #include <wizard/plugin.h>
 #include <wizard/plugin_descriptor.h>
 
-#include <iostream>
+//#include <iostream>
 #include <cassert>
 #include <fstream>
 
-using namespace std::string_literals;
 using namespace csharplm;
 
 namespace csharplm::utils {
@@ -50,7 +50,7 @@ namespace csharplm::utils {
         return assembly;
     }
 
-    void PrintAssemblyTypes(MonoAssembly* assembly) {
+    [[maybe_unused]] void PrintAssemblyTypes(MonoAssembly* assembly, const std::function<void(std::string)>& out) {
         MonoImage* image = mono_assembly_get_image(assembly);
         const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
         int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
@@ -62,7 +62,7 @@ namespace csharplm::utils {
             const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
             const char* name = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
 
-            std::cout << nameSpace << "." << name << std::endl;
+            out(std::format("{}.{}", nameSpace, ".", + name));
         }
     }
 
@@ -74,36 +74,37 @@ namespace csharplm::utils {
     }
 }
 
-bool ScriptEngine::Initialize(const wizard::IModule& m) {
-    InitMono(m.GetBaseDir() / "mono/lib");
+wizard::InitResult ScriptEngine::Initialize(const wizard::IModule& mod) {
+    InitMono(mod.GetBaseDir() / "mono/lib");
 
-    fs::path coreAssemblyPath{ m.GetBinariesDir() / "Wand.dll" };
+    ScriptGlue::RegisterFunctions();
 
     // Create an app domain
     char appName[] = "WandMonoRuntime";
     _appDomain = mono_domain_create_appdomain(appName, nullptr);
     mono_domain_set(_appDomain, true);
 
+    fs::path coreAssemblyPath{ mod.GetBinariesDir() / "Wand.dll" };
+
     // Load a core assembly
     _coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging);
-    if (!_coreAssembly) {
-        std::cout << "Could not load '" << coreAssemblyPath.string() << "' core assembly." << std::endl;
-        return false;
-    }
+    if (!_coreAssembly)
+        return wizard::ErrorData{std::format("Could not load '{}' core assembly.", coreAssemblyPath.string())};
 
     _coreImage = mono_assembly_get_image(_coreAssembly);
-    if (!_coreImage) {
-        std::cout << "Could not load '" << coreAssemblyPath.string() << "' core image." << std::endl;
-        return false;
-    }
+    if (!_coreImage)
+        return wizard::ErrorData{std::format("Could not load '{}' core image.", coreAssemblyPath.string())};
 
     // Retrieve and cache core classes/methods
 
     /// Plugin
     MonoClass* pluginClass = CacheCoreClass("Plugin");
+    if (!pluginClass)
+        return wizard::ErrorData{"Could not "};
+
     CacheCoreMethod(pluginClass, ".ctor", 8);
 
-    return true;
+    return {};
 }
 
 void ScriptEngine::Shutdown() {
@@ -148,8 +149,8 @@ void ScriptEngine::ShutdownMono() {
     }
 }
 
-ScriptRef ScriptEngine::FindScript(ScriptId id) {
-    auto it = _scripts.find(id);
+ScriptRef ScriptEngine::FindScript(const std::string& name) {
+    auto it = _scripts.find(name);
     if (it != _scripts.end())
         return it->second;
     return std::nullopt;
@@ -162,6 +163,7 @@ MonoClass* ScriptEngine::CacheCoreClass(std::string name) {
     _coreClasses.emplace(std::move(name), klass);
     return klass;
 }
+
 MonoMethod* ScriptEngine::CacheCoreMethod(MonoClass* klass, std::string name, int params) {
     assert(!_coreMethods.contains(name));
     MonoMethod* method = mono_class_get_method_from_name(klass, name.c_str(), params);
@@ -184,8 +186,16 @@ MonoString* ScriptEngine::CreateString(std::string_view string) const {
     return mono_string_new(_appDomain, string.data());
 }
 
-MonoArray* ScriptEngine::CreateArray(MonoClass *klass, size_t count) const {
+MonoArray* ScriptEngine::CreateArray(MonoClass* klass, size_t count) const {
     return mono_array_new(_appDomain, klass, count);
+}
+
+MonoArray* ScriptEngine::CreateStringArray(MonoClass *klass, std::span<std::string_view> source) const {
+    MonoArray* array = CreateArray(klass, source.size());
+    for (size_t i = 0; i < source.size(); ++i) {
+        mono_array_set(array, MonoString*, i, CreateString(source[i]));
+    }
+    return array;
 }
 
 MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
@@ -225,7 +235,7 @@ bool ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
         if (!isPlugin)
             continue;
 
-        _scripts.emplace(plugin.GetId(), ScriptInstance{ *this, plugin, assembly, image, monoClass });
+        _scripts.emplace(plugin.GetName(), ScriptInstance{ *this, plugin, assembly, image, monoClass });
 
         success = true;
     }
@@ -234,14 +244,14 @@ bool ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
 }
 
 void ScriptEngine::StartScript(const wizard::IPlugin& plugin) {
-    auto script = FindScript(plugin.GetId());
+    ScriptRef script = FindScript(plugin.GetName());
     if (script.has_value()) {
         script->get().Invoke("OnStart");
     }
 }
 
 void ScriptEngine::EndScript(const wizard::IPlugin& plugin) {
-    auto script = FindScript(plugin.GetId());
+    ScriptRef script = FindScript(plugin.GetName());
     if (script.has_value()) {
         script->get().Invoke("OnEnd");
     }
@@ -250,29 +260,30 @@ void ScriptEngine::EndScript(const wizard::IPlugin& plugin) {
 /*_________________________________________________*/
 
 ScriptInstance::ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image, MonoClass* klass)
-    : _engine{engine}, _plugin{plugin}, _assembly{assembly}, _image{image}, _klass{klass} {
+    : _assembly{assembly}, _image{image}, _klass{klass} {
 
-    _instance = _engine.InstantiateClass(_klass);
+    _instance = engine.InstantiateClass(_klass);
 
     // Call Script (base) constructor
     {
-        MonoMethod* constructor = _engine.FindCoreMethod(".ctor");
+        MonoMethod* constructor = engine.FindCoreMethod(".ctor");
         assert(constructor);
-        const auto& desc = _plugin.GetDescriptor();
-        ScriptId id = _plugin.GetId();
-        MonoArray* deps = _engine.CreateArray(mono_get_string_class(), desc.dependencies.size());
-        for (size_t i = 0; i < desc.dependencies.size(); ++i) {
-            mono_array_set(deps, MonoString*, i,  _engine.CreateString(desc.dependencies[i].name));
+        const auto& desc = plugin.GetDescriptor();
+        auto id = plugin.GetId();
+        std::vector<std::string_view> deps;
+        deps.reserve(desc.dependencies.size());
+        for (const auto& dependency : desc.dependencies) {
+            deps.emplace_back(dependency.name);
         }
-        std::array<void*, 8> args{
+        std::array<void*, 8> args {
             &id,
-            _engine.CreateString(_plugin.GetName()),
-            _engine.CreateString(_plugin.GetFriendlyName()),
-            _engine.CreateString(desc.friendlyName),
-            _engine.CreateString(desc.versionName),
-            _engine.CreateString(desc.createdBy),
-            _engine.CreateString(desc.createdByURL),
-            deps
+            engine.CreateString(plugin.GetName()),
+            engine.CreateString(plugin.GetFriendlyName()),
+            engine.CreateString(desc.friendlyName),
+            engine.CreateString(desc.versionName),
+            engine.CreateString(desc.createdBy),
+            engine.CreateString(desc.createdByURL),
+            engine.CreateStringArray(mono_get_string_class(), deps),
         };
         mono_runtime_invoke(constructor, _instance, args.data(), nullptr);
     }
@@ -309,7 +320,7 @@ MonoMethod* ScriptInstance::CacheMethod(std::string name, int params) {
     return method;
 }
 
-MonoMethod* ScriptInstance::CacheVirtualMethod(std::string name) {
+/*MonoMethod* ScriptInstance::CacheVirtualMethod(std::string name) {
     assert(!_methods.contains(name));
     MonoMethod* method = _engine.FindCoreMethod(name);
     assert(method);
@@ -317,4 +328,4 @@ MonoMethod* ScriptInstance::CacheVirtualMethod(std::string name) {
     assert(vmethod);
     _methods.emplace(std::move(name), vmethod);
     return vmethod;
-}
+}*/

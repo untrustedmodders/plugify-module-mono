@@ -12,3 +12,5 @@
 
 #include <filesystem>
 namespace fs = std::filesystem;
+
+#include <wizard/compat_format.h>
