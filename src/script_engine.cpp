@@ -256,19 +256,13 @@ MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
 }
 
 void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parameters* p, const uint8_t count, const wizard::ReturnValue* ret) {
-    printf("!MethodCall start!");
-
     const auto& exportMethods = g_charplm.GetScriptEngine()._exportMethods;
-    auto it = exportMethods.find(method->name);
+    auto it = exportMethods.find(method->funcName);
     if (it == exportMethods.end()) {
         printf("Method not found!\n");
         return;
     }
 
-    //auto& script = g_charplm.GetScriptEngine().FindScript(method->name.substr(0, method->name.find('.')))->get();
-    for (int i = 0; i < count; i++) {
-        printf("Arg: %d asInt:%d asFloat:%.2f asDouble:%.2f\n", i, p->GetArgument<int>(i), p->GetArgument<float>(i), p->GetArgument<double>(i));
-    }
     /// We not create param vector, and use Parameters* params directly if passing primitives
     std::vector<void*> args;
     args.reserve(count);
@@ -305,7 +299,7 @@ void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parame
     }
 
     MonoObject* exception = nullptr;
-    MonoObject* result = mono_runtime_invoke(it->second, NULL, args.data(), &exception);
+    MonoObject* result = mono_runtime_invoke(it->second, nullptr, args.data(), &exception);
     if (exception) {
         mono_print_unhandled_exception(exception);
         return;
@@ -391,8 +385,6 @@ void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parame
             break;
         }
     }
-
-    printf("!MethodCall end!");
 }
 
 wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
@@ -416,9 +408,9 @@ wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
     asmjit::JitRuntime rt;
 
     for (const auto& method : exportedMethods) {
-        auto seperated = utils::Split(method.name, ".");
+        auto seperated = utils::Split(method.funcName, ".");
         if (seperated.size() != 4)
-            return wizard::ErrorData{};
+            return wizard::ErrorData{"Error TODO: !"};
 
         // Name of function in format "Plugin.Namespace.Class.Method"
         std::string nameSpace{ seperated[1] };
@@ -450,20 +442,29 @@ wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
             }
         }
 
-        _exportMethods.emplace(method.name, monoMethod);
+        _exportMethods.emplace(method.funcName, monoMethod);
 
         auto jit = _functions.emplace_back(_rt).GetJitFunc(method, MethodCall);
 
         loadResult.methods.emplace_back(method.name, jit);
-
-        typedef int32_t(*JIT_intFloatDouble)(int32_t, float, double);
-        auto func = reinterpret_cast<JIT_intFloatDouble>(jit);
-        int32_t ret = func(1, 2.0f, 3.0);
-
-        printf("Return: %d", ret);
     }
 
     return loadResult;
+}
+
+void ScriptEngine::MethodExport(const wizard::IPlugin& plugin) {
+    for (const auto& [name, addr] : plugin.GetMethods()) {
+        std::string fullName{ std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), name) };
+
+        if (_importMethods.contains(fullName)) {
+            // LOG error!
+            continue;
+        }
+
+        mono_add_internal_call(fullName.c_str(), addr);
+
+        _importMethods.emplace(std::move(fullName));
+    }
 }
 
 void ScriptEngine::StartScript(const wizard::IPlugin& plugin) {

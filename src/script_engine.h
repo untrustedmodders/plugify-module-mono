@@ -29,7 +29,7 @@ namespace wizard {
     struct ReturnValue;
 }
 
-namespace asmjit { inline namespace _abi_1_11 {
+namespace asmjit { inline namespace _abi_1_12 {
         class JitRuntime;
     }
 }
@@ -82,6 +82,7 @@ namespace csharplm {
         wizard::LoadResult LoadScript(const wizard::IPlugin& plugin);
         void StartScript(const wizard::IPlugin& plugin);
         void EndScript(const wizard::IPlugin& plugin);
+        void MethodExport(const wizard::IPlugin& plugin);
 
         MonoString* CreateString(std::string_view string) const;
         MonoArray* CreateArray(MonoClass* klass, size_t count) const;
@@ -113,6 +114,7 @@ namespace csharplm {
         std::unordered_map<std::string, MonoClass*> _coreClasses;
         std::unordered_map<std::string, MonoMethod*> _coreMethods;
         std::unordered_map<std::string, MonoMethod*> _exportMethods;
+        std::set<std::string> _importMethods;
         std::vector<wizard::Function> _functions;
 
         ScriptMap _scripts;

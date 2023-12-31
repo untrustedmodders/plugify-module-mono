@@ -29,7 +29,7 @@ option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
 #
 # C# Language Module for Wizard
 #
-file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
+file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp" external/wizard/include/wizard/function.cpp)
 set(CSHARPLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})

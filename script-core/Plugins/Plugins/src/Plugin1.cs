@@ -1,9 +1,19 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using Wand;
+
+namespace example_plugin
+{
+	public static class example_plugin 
+	{
+		[MethodImplAttribute(MethodImplOptions.InternalCall)]
+		internal static extern void MakePrint(int i);
+	}
+}
 
 namespace Plugin1
 {
-    public class SamplePlugin : Plugin
+	public class SamplePlugin : Plugin
     {
         /**
          * Called when the plugin is created.
@@ -20,6 +30,7 @@ namespace Plugin1
 		void OnStart()
 		{
 			Console.Write($"{Name}: OnStart\n");
+			example_plugin.example_plugin.MakePrint(3);
 		}
 
 		/**
