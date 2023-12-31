@@ -1,6 +1,7 @@
 #pragma once
 
 #include <wizard/language_module.h>
+#include <wizard/function.h>
 #include <mono/jit/jit.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/object.h>
@@ -23,7 +24,6 @@ extern "C" {
 namespace wizard {
     class IModule;
     class IPlugin;
-    class Function;
     struct Method;
     struct Parameters;
     struct ReturnValue;
@@ -61,7 +61,6 @@ namespace csharplm {
         MonoClass* _klass{ nullptr };
         MonoObject* _instance{ nullptr };
         std::unordered_map<std::string, MonoMethod*> _methods;
-        std::vector<wizard::Function> _functions; // asmjit generated
 
         friend class ScriptEngine;
     };
@@ -101,7 +100,7 @@ namespace csharplm {
         MonoClass* FindCoreClass(const std::string& name) const;
         MonoMethod* FindCoreMethod(const std::string& name) const;
 
-        static void FunctionCallback(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* retVal);
+        static void MethodCall(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* retVal);
 
     private:
         MonoDomain* _rootDomain{ nullptr };
@@ -110,12 +109,13 @@ namespace csharplm {
         MonoAssembly* _coreAssembly{ nullptr };
         MonoImage* _coreImage{ nullptr };
 
+        std::shared_ptr<asmjit::JitRuntime> _rt;
         std::unordered_map<std::string, MonoClass*> _coreClasses;
         std::unordered_map<std::string, MonoMethod*> _coreMethods;
+        std::unordered_map<std::string, MonoMethod*> _exportMethods;
+        std::vector<wizard::Function> _functions;
 
         ScriptMap _scripts;
-
-        std::shared_ptr<asmjit::JitRuntime> _rt;
 
 #ifdef _DEBUG
         bool _enableDebugging{ true };

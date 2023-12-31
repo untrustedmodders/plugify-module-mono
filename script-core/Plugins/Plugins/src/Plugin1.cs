@@ -41,6 +41,7 @@ namespace Plugin1
 		public static int MyExportFunction(int a, float b, double c)
 		{
 		    Console.Write("I believe that what doesn't kill you makes you... stranger!!! \n");
+		    Console.Write($"{a}, {b}, {c}");
 		    return 1337;
 		}
     }

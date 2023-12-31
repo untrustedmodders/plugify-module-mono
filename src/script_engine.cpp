@@ -1,11 +1,10 @@
 #include "script_engine.h"
 #include "script_glue.h"
+#include "module.h"
 
 #include <wizard/module.h>
 #include <wizard/plugin.h>
 #include <wizard/plugin_descriptor.h>
-#include <wizard/function.h>
-#include <asmjit/asmjit.h>
 
 //#include <iostream>
 #include <cassert>
@@ -256,8 +255,144 @@ MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
     return instance;
 }
 
-void ScriptEngine::FunctionCallback(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* ret) {
+void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parameters* p, const uint8_t count, const wizard::ReturnValue* ret) {
+    printf("!MethodCall start!");
 
+    const auto& exportMethods = g_charplm.GetScriptEngine()._exportMethods;
+    auto it = exportMethods.find(method->name);
+    if (it == exportMethods.end()) {
+        printf("Method not found!\n");
+        return;
+    }
+
+    //auto& script = g_charplm.GetScriptEngine().FindScript(method->name.substr(0, method->name.find('.')))->get();
+    for (int i = 0; i < count; i++) {
+        printf("Arg: %d asInt:%d asFloat:%.2f asDouble:%.2f\n", i, p->GetArgument<int>(i), p->GetArgument<float>(i), p->GetArgument<double>(i));
+    }
+    /// We not create param vector, and use Parameters* params directly if passing primitives
+    std::vector<void*> args;
+    args.reserve(count);
+
+    for (int i = 0; i < count; i++) {
+        using enum wizard::ValueType;
+        switch (method->paramTypes[i]) {
+            case Invalid:
+            case Void:
+                // Should not trigger!
+                break;
+            case Bool:
+            case Char8:
+            case Char16:
+            case Int8:
+            case Int16:
+            case Int32:
+            case Int64:
+            case Uint8:
+            case Uint16:
+            case Uint32:
+            case Uint64:
+            case Ptr64:
+            case Float:
+            case Double:
+                args.push_back(p->GetArgumentPtr(i));
+                break;
+            case String: {
+                auto str = p->GetArgument<std::string*>(i);
+                args.push_back(str != nullptr ? g_charplm.GetScriptEngine().CreateString(*str) : nullptr);
+                break;
+            }
+        }
+    }
+
+    MonoObject* exception = nullptr;
+    MonoObject* result = mono_runtime_invoke(it->second, NULL, args.data(), &exception);
+    if (exception) {
+        mono_print_unhandled_exception(exception);
+        return;
+    }
+
+    using enum wizard::ValueType;
+    switch (method->retType) {
+        case Invalid:
+        case Void:
+            break;
+        case Bool: {
+            bool val = *(bool*) mono_object_unbox(result);
+            ret->SetReturnPtr<bool>(val);
+            break;
+        }
+        case Char8: {
+            char val = *(char*) mono_object_unbox(result);
+            ret->SetReturnPtr<char>(val);
+            break;
+        }
+        case Char16: {
+            wchar_t val = *(wchar_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<wchar_t>(val);
+            break;
+        }
+        case Int8: {
+            int8_t val = *(int8_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<int8_t>(val);
+            break;
+        }
+        case Int16: {
+            int16_t val = *(int16_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<int16_t>(val);
+            break;
+        }
+        case Int32: {
+            int32_t val = *(int32_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<int32_t>(val);
+            break;
+        }
+        case Int64: {
+            int64_t val = *(int64_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<int64_t>(val);
+            break;
+        }
+        case Uint8: {
+            uint8_t val = *(uint8_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<uint8_t>(val);
+            break;
+        }
+        case Uint16: {
+            uint16_t val = *(uint16_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<uint16_t>(val);
+            break;
+        }
+        case Uint32: {
+            uint32_t val = *(uint32_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<uint32_t>(val);
+            break;
+        }
+        case Uint64: {
+            uint64_t val = *(uint64_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<uint64_t>(val);
+            break;
+        }
+        case Ptr64: {
+            uintptr_t val = *(uintptr_t*) mono_object_unbox(result);
+            ret->SetReturnPtr<uintptr_t>(val);
+            break;
+        }
+        case Float: {
+            float val = *(float*) mono_object_unbox(result);
+            ret->SetReturnPtr<float>(val);
+            break;
+        }
+        case Double: {
+            double val = *(double*) mono_object_unbox(result);
+            ret->SetReturnPtr<double>(val);
+            break;
+        }
+        case String: {
+            // TODO: How return string ?
+            break;
+        }
+    }
+
+    printf("!MethodCall end!");
 }
 
 wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
@@ -282,13 +417,13 @@ wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
 
     for (const auto& method : exportedMethods) {
         auto seperated = utils::Split(method.name, ".");
-        if (seperated.size() != 3)
+        if (seperated.size() != 4)
             return wizard::ErrorData{};
 
         // Name of function in format "Plugin.Namespace.Class.Method"
-        std::string nameSpace{ seperated[0] };
-        std::string className{ seperated[1] };
-        std::string methodName{ seperated[2] };
+        std::string nameSpace{ seperated[1] };
+        std::string className{ seperated[2] };
+        std::string methodName{ seperated[3] };
 
         MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
         if (!monoClass)
@@ -315,12 +450,17 @@ wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
             }
         }
 
-        script->get()._methods[method.name] = monoMethod;
-        auto& function = script->get()._functions.emplace_back(_rt);
+        _exportMethods.emplace(method.name, monoMethod);
 
-        auto jit = function.GetJitFunc(method, FunctionCallback);
+        auto jit = _functions.emplace_back(_rt).GetJitFunc(method, MethodCall);
 
-        loadResult.methods.emplace_back(std::format("{}.{}", plugin.GetName(), method.name), jit);
+        loadResult.methods.emplace_back(method.name, jit);
+
+        typedef int32_t(*JIT_intFloatDouble)(int32_t, float, double);
+        auto func = reinterpret_cast<JIT_intFloatDouble>(jit);
+        int32_t ret = func(1, 2.0f, 3.0);
+
+        printf("Return: %d", ret);
     }
 
     return loadResult;
