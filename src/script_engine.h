@@ -2,37 +2,8 @@
 
 #include <wizard/language_module.h>
 #include <wizard/function.h>
-#include <mono/jit/jit.h>
-#include <mono/metadata/assembly.h>
-#include <mono/metadata/object.h>
-#include <mono/metadata/class.h>
-#include <mono/metadata/attrdefs.h>
-#include <mono/metadata/mono-debug.h>
-#include <mono/metadata/threads.h>
 
-extern "C" {
-    typedef struct _MonoClass MonoClass;
-    typedef struct _MonoObject MonoObject;
-    typedef struct _MonoMethod MonoMethod;
-    typedef struct _MonoAssembly MonoAssembly;
-    typedef struct _MonoImage MonoImage;
-    typedef struct _MonoClassField MonoClassField;
-    typedef struct _MonoString MonoString;
-    typedef struct _MonoDomain MonoDomain;
-}
-
-namespace wizard {
-    class IModule;
-    class IPlugin;
-    struct Method;
-    struct Parameters;
-    struct ReturnValue;
-}
-
-namespace asmjit { inline namespace _abi_1_12 {
-        class JitRuntime;
-    }
-}
+#include "fwd.h"
 
 namespace csharplm {
 
@@ -40,27 +11,22 @@ namespace csharplm {
 
     class ScriptInstance {
     public:
-        ScriptInstance() = delete;
-        ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image, MonoClass* klass);
-        ScriptInstance(ScriptInstance&& other) noexcept = default;
+        ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin& plugin, MonoClass* klass);
         ~ScriptInstance();
-
-        bool Invoke(const std::string& name) const;
 
         operator bool() const { return _instance != nullptr; }
         operator MonoObject*() const { return _instance; }
         MonoObject* GetManagedObject() const { return _instance; }
 
     private:
-        MonoMethod* CacheMethod(std::string name, int params);
-        //MonoMethod* CacheVirtualMethod(std::string name);
+        void InvokeOnStart() const;
+        void InvokeOnEnd() const;
 
     private:
-        MonoAssembly* _assembly{ nullptr };
-        MonoImage* _image{ nullptr };
         MonoClass* _klass{ nullptr };
         MonoObject* _instance{ nullptr };
-        std::unordered_map<std::string, MonoMethod*> _methods;
+        MonoMethod* _onStartMethod{ nullptr };
+        MonoMethod* _onEndMethod{ nullptr };
 
         friend class ScriptEngine;
     };
@@ -68,21 +34,21 @@ namespace csharplm {
     using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
     using ScriptRef = std::optional<std::reference_wrapper<ScriptInstance>>;
 
-    class ScriptEngine {
+    class ScriptEngine :  public wizard::ILanguageModule {
     public:
         ScriptEngine() = default;
         ~ScriptEngine() = default;
 
-        wizard::InitResult Initialize(const wizard::IModule& module);
-        void Shutdown();
+        // ILanguageModule
+        wizard::InitResult Initialize(std::weak_ptr<wizard::IWizardProvider> provider, const wizard::IModule& module) override;
+        void Shutdown() override;
+        wizard::LoadResult OnPluginLoad(const wizard::IPlugin& plugin) override;
+        void OnPluginStart(const wizard::IPlugin& plugin) override;
+        void OnPluginEnd(const wizard::IPlugin& plugin) override;
+        void OnMethodExport(const wizard::IPlugin& plugin) override;
 
-        const ScriptMap& GetScriptMap() const { return _scripts; }
+        const ScriptMap& GetScripts() const { return _scripts; }
         ScriptRef FindScript(const std::string& name);
-
-        wizard::LoadResult LoadScript(const wizard::IPlugin& plugin);
-        void StartScript(const wizard::IPlugin& plugin);
-        void EndScript(const wizard::IPlugin& plugin);
-        void MethodExport(const wizard::IPlugin& plugin);
 
         MonoString* CreateString(std::string_view string) const;
         MonoArray* CreateArray(MonoClass* klass, size_t count) const;
@@ -93,7 +59,7 @@ namespace csharplm {
         void InitMono(const fs::path& monoPath);
         void ShutdownMono();
 
-        ScriptRef CreateScriptInstance(const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image);
+        ScriptRef CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
 
         MonoClass* CacheCoreClass(std::string name);
         MonoMethod* CacheCoreMethod(MonoClass* klass, std::string name, int params);
@@ -111,10 +77,11 @@ namespace csharplm {
         MonoImage* _coreImage{ nullptr };
 
         std::shared_ptr<asmjit::JitRuntime> _rt;
+        std::shared_ptr<wizard::IWizardProvider> _provider;
         std::unordered_map<std::string, MonoClass*> _coreClasses;
         std::unordered_map<std::string, MonoMethod*> _coreMethods;
         std::unordered_map<std::string, MonoMethod*> _exportMethods;
-        std::set<std::string> _importMethods;
+        std::unordered_set<std::string> _importMethods;
         std::vector<wizard::Function> _functions;
 
         ScriptMap _scripts;

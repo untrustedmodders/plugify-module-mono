@@ -10,7 +10,7 @@ using namespace csharplm;
 
 static MonoObject* Plugin_FindPluginByName(MonoString* name) {
     char* nameCStr = mono_string_to_utf8(name);
-    csharplm::ScriptRef script = g_charplm.GetScriptEngine().FindScript(nameCStr);
+    csharplm::ScriptRef script = g_charplm.FindScript(nameCStr);
     mono_free(nameCStr);
     return script.has_value() ? script->get().GetManagedObject() : nullptr;
 }

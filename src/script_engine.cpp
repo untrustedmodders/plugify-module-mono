@@ -2,16 +2,23 @@
 #include "script_glue.h"
 #include "module.h"
 
+#include <mono/jit/jit.h>
+#include <mono/metadata/assembly.h>
+#include <mono/metadata/object.h>
+#include <mono/metadata/class.h>
+#include <mono/metadata/attrdefs.h>
+#include <mono/metadata/mono-debug.h>
+#include <mono/metadata/threads.h>
+
 #include <wizard/module.h>
 #include <wizard/plugin.h>
 #include <wizard/plugin_descriptor.h>
+#include <wizard/wizard_provider.h>
 
-//#include <iostream>
-#include <cassert>
 #include <fstream>
-#include <cstring>
 
 using namespace csharplm;
+using namespace wizard;
 
 namespace csharplm::utils {
     template<typename T>
@@ -74,9 +81,9 @@ namespace csharplm::utils {
         return str;
     }
 
-    wizard::ValueType MonoTypeToValueType(const char* typeName) {
-        using enum wizard::ValueType;
-        static std::unordered_map<std::string_view, wizard::ValueType> valueTypeMap = {
+    ValueType MonoTypeToValueType(const char* typeName) {
+        using enum ValueType;
+        static std::unordered_map<std::string_view, ValueType> valueTypeMap = {
             { "System.Void", Void },
             { "System.Boolean", Bool },
             { "System.Char", Char8 },
@@ -96,7 +103,7 @@ namespace csharplm::utils {
         };
         auto it = valueTypeMap.find(typeName);
         if (it != valueTypeMap.end())
-            return it->second;
+            return std::get<ValueType>(*it);
         return Invalid;
     }
 
@@ -120,8 +127,11 @@ namespace csharplm::utils {
     }
 }
 
-wizard::InitResult ScriptEngine::Initialize(const wizard::IModule& mod) {
-    InitMono(mod.GetBaseDir() / "mono/lib");
+InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, const IModule& m) {
+    if (!(_provider = provider.lock()))
+        return ErrorData{ "Provider not exposed" };
+
+    InitMono(m.GetBaseDir() / "mono/lib");
 
     ScriptGlue::RegisterFunctions();
 
@@ -132,34 +142,52 @@ wizard::InitResult ScriptEngine::Initialize(const wizard::IModule& mod) {
     _appDomain = mono_domain_create_appdomain(appName, nullptr);
     mono_domain_set(_appDomain, true);
 
-    fs::path coreAssemblyPath{ mod.GetBinariesDir() / "Wand.dll" };
+    fs::path coreAssemblyPath{ m.GetBinariesDir() / "Wand.dll" };
 
     // Load a core assembly
     MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
     _coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging, status);
     if (!_coreAssembly)
-        return wizard::ErrorData{std::format("Could not load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
+        return ErrorData{std::format("Failed to load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
 
     _coreImage = mono_assembly_get_image(_coreAssembly);
     if (!_coreImage)
-        return wizard::ErrorData{std::format("Could not load '{}' core image.", coreAssemblyPath.string())};
+        return ErrorData{std::format("Failed to load '{}' core image.", coreAssemblyPath.string())};
 
     // Retrieve and cache core classes/methods
 
     /// Plugin
     MonoClass* pluginClass = CacheCoreClass("Plugin");
     if (!pluginClass)
-        return wizard::ErrorData{std::format("Could not find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string())};
+        return ErrorData{std::format("Failed to find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string())};
 
     MonoMethod* pluginCtor = CacheCoreMethod(pluginClass, ".ctor", 8);
     if (!pluginCtor)
-        return wizard::ErrorData{std::format("Could not find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string())};
+        return ErrorData{std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string())};
 
-    return {};
+    /// IPluginListener
+    /*{
+        MonoClass* serverListener = CacheCoreClass("IPluginListener");
+        CacheCoreMethod(serverListener, "OnPluginCreate", 0);
+        CacheCoreMethod(serverListener, "OnPluginStart", 0);
+        CacheCoreMethod(serverListener, "OnPluginEnd", 0);
+        CacheCoreMethod(serverListener, "OnPluginDestroy", 0);
+    }*/
+
+    _provider->Log("[CSHARPLM] Inited!", Severity::Debug);
+
+    return InitResultData{};
 }
 
 void ScriptEngine::Shutdown() {
+    _coreClasses.clear();
+    _coreMethods.clear();
+    _exportMethods.clear();
+    _importMethods.clear();
+    _functions.clear();
     _scripts.clear();
+    _provider.reset();
+    _rt.reset();
 
     ShutdownMono();
 }
@@ -178,7 +206,10 @@ void ScriptEngine::InitMono(const fs::path& monoPath) {
     }
 
     _rootDomain = mono_jit_init("WandJITRuntime");
-    assert(_rootDomain);
+    if (rootDomain == NULL) {
+        printf("Init Mono Failed At jit_init\n");
+        return;
+    }
 
     if (_enableDebugging)
         mono_debug_domain_create(_rootDomain);
@@ -198,65 +229,13 @@ void ScriptEngine::ShutdownMono() {
         mono_jit_cleanup(_rootDomain);
         _rootDomain = nullptr;
     }
+
+    _coreAssembly = nullptr;
+    _coreImage = nullptr;
 }
 
-ScriptRef ScriptEngine::FindScript(const std::string& name) {
-    auto it = _scripts.find(name);
-    if (it != _scripts.end())
-        return it->second;
-    return std::nullopt;
-}
-
-MonoClass* ScriptEngine::CacheCoreClass(std::string name) {
-    assert(!_coreMethods.contains(name));
-    MonoClass* klass = mono_class_from_name(_coreImage, "Wand", name.c_str());
-    assert(klass);
-    _coreClasses.emplace(std::move(name), klass);
-    return klass;
-}
-
-MonoMethod* ScriptEngine::CacheCoreMethod(MonoClass* klass, std::string name, int params) {
-    assert(!_coreMethods.contains(name));
-    MonoMethod* method = mono_class_get_method_from_name(klass, name.c_str(), params);
-    assert(method);
-    _coreMethods.emplace(std::move(name), method);
-    return method;
-}
-
-MonoClass* ScriptEngine::FindCoreClass(const std::string& name) const{
-    auto it = _coreClasses.find(name);
-    return it != _coreClasses.end() ? it->second : nullptr;
-}
-
-MonoMethod* ScriptEngine::FindCoreMethod(const std::string& name) const {
-    auto it = _coreMethods.find(name);
-    return it != _coreMethods.end() ? it->second : nullptr;
-}
-
-MonoString* ScriptEngine::CreateString(std::string_view string) const {
-    return mono_string_new(_appDomain, string.data());
-}
-
-MonoArray* ScriptEngine::CreateArray(MonoClass* klass, size_t count) const {
-    return mono_array_new(_appDomain, klass, count);
-}
-
-MonoArray* ScriptEngine::CreateStringArray(MonoClass *klass, std::span<std::string_view> source) const {
-    MonoArray* array = CreateArray(klass, source.size());
-    for (size_t i = 0; i < source.size(); ++i) {
-        mono_array_set(array, MonoString*, i, CreateString(source[i]));
-    }
-    return array;
-}
-
-MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
-    MonoObject* instance = mono_object_new(_appDomain, klass);
-    mono_runtime_object_init(instance);
-    return instance;
-}
-
-void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parameters* p, const uint8_t count, const wizard::ReturnValue* ret) {
-    const auto& exportMethods = g_charplm.GetScriptEngine()._exportMethods;
+void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
+    const auto& exportMethods = g_charplm._exportMethods;
     auto it = exportMethods.find(method->funcName);
     if (it == exportMethods.end()) {
         printf("Method not found!\n");
@@ -267,8 +246,8 @@ void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parame
     std::vector<void*> args;
     args.reserve(count);
 
-    for (int i = 0; i < count; i++) {
-        using enum wizard::ValueType;
+    for (uint8_t i = 0; i < count; ++i) {
+        using enum ValueType;
         switch (method->paramTypes[i]) {
             case Invalid:
             case Void:
@@ -292,20 +271,20 @@ void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parame
                 break;
             case String: {
                 auto str = p->GetArgument<std::string*>(i);
-                args.push_back(str != nullptr ? g_charplm.GetScriptEngine().CreateString(*str) : nullptr);
+                args.push_back(str != nullptr ? g_charplm.CreateString(*str) : nullptr);
                 break;
             }
         }
     }
 
     MonoObject* exception = nullptr;
-    MonoObject* result = mono_runtime_invoke(it->second, nullptr, args.data(), &exception);
+    MonoObject* result = mono_runtime_invoke(std::get<MonoMethod*>(*it), nullptr, args.data(), &exception);
     if (exception) {
         mono_print_unhandled_exception(exception);
         return;
     }
 
-    using enum wizard::ValueType;
+    using enum ValueType;
     switch (method->retType) {
         case Invalid:
         case Void:
@@ -387,62 +366,82 @@ void ScriptEngine::MethodCall(const wizard::Method* method, const wizard::Parame
     }
 }
 
-wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
+LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
     MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
     MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _enableDebugging, status);
     if (!assembly)
-        return wizard::ErrorData{std::format("Could not load '{}' plugin assembly. Reason: {}", plugin.GetFilePath().string(), mono_image_strerror(status))};
+        return ErrorData{std::format("Failed to load assembly: '{}'",mono_image_strerror(status))};
 
     MonoImage* image = mono_assembly_get_image(assembly);
     if (!image)
-        return wizard::ErrorData{std::format("Could not load '{}' plugin image.", plugin.GetFilePath().string())};
+        return ErrorData{std::format("Failed to load assembly image")};
 
-    auto script = CreateScriptInstance(plugin, assembly, image);
+    auto script = CreateScriptInstance(plugin, image);
     if (!script.has_value())
-        return wizard::ErrorData{std::format("Could not find 'Plugin' class implementation! Check '{}' assembly!", plugin.GetFilePath().string())};
+        return ErrorData{std::format("Failed to find 'Plugin' class implementation")};
 
     auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
-    wizard::LoadResultData loadResult;
+    LoadResultData loadResult;
     loadResult.methods.reserve(exportedMethods.size());
 
     asmjit::JitRuntime rt;
+    std::vector<std::string> funcErrors;
 
     for (const auto& method : exportedMethods) {
         auto seperated = utils::Split(method.funcName, ".");
         if (seperated.size() != 4)
-            return wizard::ErrorData{"Error TODO: !"};
+            return ErrorData{ std::format("Invalid function name: '{}'. Please provide name in that format: 'Plugin.Namespace.Class.Method'", method.funcName) };
 
-        // Name of function in format "Plugin.Namespace.Class.Method"
+        // Name of function in format ""
         std::string nameSpace{ seperated[1] };
         std::string className{ seperated[2] };
         std::string methodName{ seperated[3] };
 
         MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
         if (!monoClass)
-            return wizard::ErrorData{"Error TODO: !"};
+            return ErrorData{ std::format("Failed to find class '{}.{}'", nameSpace, className) };
 
-        int paramCount = static_cast<int>(method.paramTypes.size());
-        MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), paramCount);
+        MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), -1);
         if (!monoMethod)
-            return wizard::ErrorData{"Error TODO: !"};
+            return ErrorData{ std::format("Failed to find method '{}.{}::{}'", nameSpace, className, methodName) };
+
+        uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
+        if (!(methodFlags & MONO_METHOD_ATTR_STATIC))
+            return ErrorData{ std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName) };
 
         MonoMethodSignature* sig = mono_method_signature(monoMethod);
 
-        char* returnType = mono_type_get_name(mono_signature_get_return_type(sig));
-        if (utils::MonoTypeToValueType(returnType) != method.retType) {
-            continue;
-        }
+        uint32_t paramCount = mono_signature_get_param_count(sig);
+        if (paramCount != method.paramTypes.size())
+            return ErrorData{ std::format("Invalid parameter count {} when it should have {}", method.paramTypes.size(), paramCount) };
+
+        char* returnTypeName = mono_type_get_name(mono_signature_get_return_type(sig));
+        ValueType returnType = utils::MonoTypeToValueType(returnTypeName);
+        if (returnType == ValueType::Invalid)
+            return ErrorData{ std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName) };
+
+        if (returnType != method.retType)
+            return ErrorData{ std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'",
+                nameSpace, className, methodName, ValueTypeToString(method.retType), ValueTypeToString(returnType)) };
 
         size_t i = 0;
         void* iter = nullptr;
         while (MonoType* type = mono_signature_get_params(sig, &iter)) {
-            char* paramType = mono_type_get_name(type);
-            if (utils::MonoTypeToValueType(paramType) != method.paramTypes[i++]) {
-                continue;
-            }
+            char* paramTypeName = mono_type_get_name(type);
+            ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
+            if (paramType == ValueType::Invalid)
+                return ErrorData{ std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName) };
+
+            if (paramType != method.paramTypes[i])
+                return ErrorData{ std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'",
+                    nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i]), i, ValueTypeToString(paramType)) };
+
+            i++;
         }
 
-        _exportMethods.emplace(method.funcName, monoMethod);
+        const auto [_, result] = _exportMethods.try_emplace(method.funcName, monoMethod);
+        if (!result)
+            return ErrorData{ std::format("Method name duplicate: ", method.funcName) };
 
         auto jit = _functions.emplace_back(_rt).GetJitFunc(method, MethodCall);
 
@@ -452,36 +451,35 @@ wizard::LoadResult ScriptEngine::LoadScript(const wizard::IPlugin& plugin) {
     return loadResult;
 }
 
-void ScriptEngine::MethodExport(const wizard::IPlugin& plugin) {
+void ScriptEngine::OnMethodExport(const IPlugin& plugin) {
     for (const auto& [name, addr] : plugin.GetMethods()) {
-        std::string fullName{ std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), name) };
+        std::string funcName{ std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), name) };
 
-        if (_importMethods.contains(fullName)) {
-            // LOG error!
+        if (_importMethods.contains(funcName)) {
+            _provider->Log(std::format("Method name duplicate: {}", funcName), Severity::Error);
             continue;
         }
 
-        mono_add_internal_call(fullName.c_str(), addr);
-
-        _importMethods.emplace(std::move(fullName));
+        mono_add_internal_call(funcName.c_str(), addr);
+        _importMethods.emplace(std::move(funcName));
     }
 }
 
-void ScriptEngine::StartScript(const wizard::IPlugin& plugin) {
+void ScriptEngine::OnPluginStart(const IPlugin& plugin) {
     ScriptRef script = FindScript(plugin.GetName());
     if (script.has_value()) {
-        script->get().Invoke("OnStart");
+        script->get().InvokeOnStart();
     }
 }
 
-void ScriptEngine::EndScript(const wizard::IPlugin& plugin) {
+void ScriptEngine::OnPluginEnd(const IPlugin& plugin) {
     ScriptRef script = FindScript(plugin.GetName());
     if (script.has_value()) {
-        script->get().Invoke("OnEnd");
+        script->get().InvokeOnEnd();
     }
 }
 
-ScriptRef ScriptEngine::CreateScriptInstance(const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image) {
+ScriptRef ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* image) {
     MonoClass* pluginClass = FindCoreClass("Plugin");
 
     const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
@@ -502,23 +500,75 @@ ScriptRef ScriptEngine::CreateScriptInstance(const wizard::IPlugin& plugin, Mono
         if (!isPlugin)
             continue;
 
-        return _scripts.emplace(plugin.GetName(), ScriptInstance{ *this, plugin, assembly, image, monoClass }).first->second;
+        const auto [it, result] = _scripts.try_emplace(plugin.GetName(), ScriptInstance{ *this, plugin, monoClass });
+        if (result)
+            return std::get<ScriptInstance>(*it);
     }
 
     return std::nullopt;
 }
 
+ScriptRef ScriptEngine::FindScript(const std::string& name) {
+    auto it = _scripts.find(name);
+    if (it != _scripts.end())
+        return std::get<ScriptInstance>(*it);
+    return std::nullopt;
+}
+
+MonoClass* ScriptEngine::CacheCoreClass(std::string name) {
+    MonoClass* klass = mono_class_from_name(_coreImage, "Wand", name.c_str());
+    if (klass)
+        _coreClasses.emplace(std::move(name), klass);
+    return klass;
+}
+
+MonoMethod* ScriptEngine::CacheCoreMethod(MonoClass* klass, std::string name, int params) {
+    MonoMethod* method = mono_class_get_method_from_name(klass, name.c_str(), params);
+    if (method)
+        _coreMethods.emplace(std::move(name), method);
+    return method;
+}
+
+MonoClass* ScriptEngine::FindCoreClass(const std::string& name) const{
+    auto it = _coreClasses.find(name);
+    return it != _coreClasses.end() ? std::get<MonoClass*>(*it) : nullptr;
+}
+
+MonoMethod* ScriptEngine::FindCoreMethod(const std::string& name) const {
+    auto it = _coreMethods.find(name);
+    return it != _coreMethods.end() ? std::get<MonoMethod*>(*it) : nullptr;
+}
+
+MonoString* ScriptEngine::CreateString(std::string_view string) const {
+    return mono_string_new(_appDomain, string.data());
+}
+
+MonoArray* ScriptEngine::CreateArray(MonoClass* klass, size_t count) const {
+    return mono_array_new(_appDomain, klass, count);
+}
+
+MonoArray* ScriptEngine::CreateStringArray(MonoClass *klass, std::span<std::string_view> source) const {
+    MonoArray* array = CreateArray(klass, source.size());
+    for (size_t i = 0; i < source.size(); ++i) {
+        mono_array_set(array, MonoString*, i, CreateString(source[i]));
+    }
+    return array;
+}
+
+MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
+    MonoObject* instance = mono_object_new(_appDomain, klass);
+    mono_runtime_object_init(instance);
+    return instance;
+}
+
 /*_________________________________________________*/
 
-ScriptInstance::ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin& plugin, MonoAssembly* assembly, MonoImage* image, MonoClass* klass)
-    : _assembly{assembly}, _image{image}, _klass{klass} {
-
+ScriptInstance::ScriptInstance(const ScriptEngine& engine, const IPlugin& plugin, MonoClass* klass) : _klass{klass} {
     _instance = engine.InstantiateClass(_klass);
 
     // Call Script (base) constructor
     {
         MonoMethod* constructor = engine.FindCoreMethod(".ctor");
-        assert(constructor);
         const auto& desc = plugin.GetDescriptor();
         auto id = plugin.GetId();
         std::vector<std::string_view> deps;
@@ -539,44 +589,28 @@ ScriptInstance::ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin
         mono_runtime_invoke(constructor, _instance, args.data(), nullptr);
     }
 
-    CacheMethod("OnCreate", 0);
-    CacheMethod("OnStart", 0);
-    CacheMethod("OnEnd", 0);
-    CacheMethod("OnDestroy", 0);
-
-    Invoke("OnCreate");
+    _onStartMethod = mono_class_get_method_from_name(_klass, "OnStart", 0);
+    _onEndMethod  = mono_class_get_method_from_name(_klass, "OnEnd", 0);
 }
 
-ScriptInstance::~ScriptInstance() {
-    Invoke("OnDestroy");
-}
+ScriptInstance::~ScriptInstance() = default;
 
-bool ScriptInstance::Invoke(const std::string& name) const {
-    if (auto it = _methods.find(name); it != _methods.end()) {
+void ScriptInstance::InvokeOnStart() const {
+    if (_onStartMethod) {
         MonoObject* exception = nullptr;
-        mono_runtime_invoke(it->second, _instance, nullptr, &exception);
+        mono_runtime_invoke(_onStartMethod, _instance, nullptr, &exception);
         if (exception) {
             mono_print_unhandled_exception(exception);
-            return false;
         }
     }
-    return true;
 }
 
-MonoMethod* ScriptInstance::CacheMethod(std::string name, int params) {
-    assert(!_methods.contains(name));
-    MonoMethod* method = mono_class_get_method_from_name(_klass, name.c_str(), params);
-    if (method)
-        _methods.emplace(std::move(name), method);
-    return method;
+void ScriptInstance::InvokeOnEnd() const {
+    if (_onEndMethod) {
+        MonoObject* exception = nullptr;
+        mono_runtime_invoke(_onEndMethod, _instance, nullptr, &exception);
+        if (exception) {
+            mono_print_unhandled_exception(exception);
+        }
+    }
 }
-
-/*MonoMethod* ScriptInstance::CacheVirtualMethod(std::string name) {
-    assert(!_methods.contains(name));
-    MonoMethod* method = _engine.FindCoreMethod(name);
-    assert(method);
-    MonoMethod* vmethod = mono_object_get_virtual_method(_instance, method);
-    assert(vmethod);
-    _methods.emplace(std::move(name), vmethod);
-    return vmethod;
-}*/
