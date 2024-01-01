@@ -248,7 +248,7 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 
 	for (uint8_t i = 0; i < count; ++i) {
 		using enum ValueType;
-		switch (method->paramTypes[i]) {
+		switch (method->paramTypes[i].type) {
 			case Invalid:
 			case Void:
 				// Should not trigger!
@@ -285,7 +285,7 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 	}
 
 	using enum ValueType;
-	switch (method->retType) {
+	switch (method->retType.type) {
 		case Invalid:
 		case Void:
 			break;
@@ -430,8 +430,8 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
             continue;
         }
 
-        if (returnType != method.retType) {
-            methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType), ValueTypeToString(returnType)));
+        if (returnType != method.retType.type) {
+            methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType.type), ValueTypeToString(returnType)));
             continue;
         }
 
@@ -445,8 +445,8 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
                 continue;
             }
 
-            if (paramType != method.paramTypes[i]) {
-                methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i]), i, ValueTypeToString(paramType)));
+            if (paramType != method.paramTypes[i].type) {
+                methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i].type), i, ValueTypeToString(paramType)));
                 continue;
             }
 
