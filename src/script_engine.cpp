@@ -206,8 +206,8 @@ void ScriptEngine::InitMono(const fs::path& monoPath) {
     }
 
     _rootDomain = mono_jit_init("WandJITRuntime");
-    if (rootDomain == NULL) {
-        printf("Init Mono Failed At jit_init\n");
+    if (!_rootDomain) {
+        _provider->Log("Initialization of mono failed", Severity::Error);
         return;
     }
 
