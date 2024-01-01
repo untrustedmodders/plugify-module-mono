@@ -1,8 +1,8 @@
 #pragma once
 
 namespace csharplm {
-    class ScriptGlue {
-    public:
-        static void RegisterFunctions();
-    };
+	class ScriptGlue {
+	public:
+		static void RegisterFunctions();
+	};
 }

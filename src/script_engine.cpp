@@ -21,367 +21,367 @@ using namespace csharplm;
 using namespace wizard;
 
 namespace csharplm::utils {
-    template<typename T>
-    inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
-        std::ifstream istream{file, std::ios::binary};
-        if (!istream)
-            return false;
-        std::vector<T> buffer{ std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
-        callback({ buffer.data(), buffer.size() });
-        return true;
-    }
+	template<typename T>
+	inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
+		std::ifstream istream{file, std::ios::binary};
+		if (!istream)
+			return false;
+		std::vector<T> buffer{ std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
+		callback({ buffer.data(), buffer.size() });
+		return true;
+	}
 
-    MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
-        MonoImage* image = nullptr;
+	MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
+		MonoImage* image = nullptr;
 
-        ReadBytes<char>(assemblyPath, [&image, &status](std::span<char> buffer) {
-            image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
-        });
+		ReadBytes<char>(assemblyPath, [&image, &status](std::span<char> buffer) {
+			image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
+		});
 
-        if (status != MONO_IMAGE_OK) {
-            return nullptr;
-        }
+		if (status != MONO_IMAGE_OK) {
+			return nullptr;
+		}
 
-        if (loadPDB) {
-            fs::path pdbPath{ assemblyPath };
-            pdbPath.replace_extension(".pdb");
+		if (loadPDB) {
+			fs::path pdbPath{ assemblyPath };
+			pdbPath.replace_extension(".pdb");
 
-            ReadBytes<mono_byte>(pdbPath, [&image](std::span<mono_byte> buffer) {
-                mono_debug_open_image_from_memory(image, buffer.data(), static_cast<int>(buffer.size()));
-            });
+			ReadBytes<mono_byte>(pdbPath, [&image](std::span<mono_byte> buffer) {
+				mono_debug_open_image_from_memory(image, buffer.data(), static_cast<int>(buffer.size()));
+			});
 
-            // If pdf not load ?
-        }
+			// If pdf not load ?
+		}
 
-        MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
-        mono_image_close(image);
-        return assembly;
-    }
+		MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
+		mono_image_close(image);
+		return assembly;
+	}
 
-    [[maybe_unused]] void PrintAssemblyTypes(MonoAssembly* assembly, const std::function<void(std::string)>& out) {
-        MonoImage* image = mono_assembly_get_image(assembly);
-        const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
-        int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
+	[[maybe_unused]] void PrintAssemblyTypes(MonoAssembly* assembly, const std::function<void(std::string)>& out) {
+		MonoImage* image = mono_assembly_get_image(assembly);
+		const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
+		int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
 
-        for (int i = 0; i < numTypes; ++i) {
-            uint32_t cols[MONO_TYPEDEF_SIZE];
-            mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
+		for (int i = 0; i < numTypes; ++i) {
+			uint32_t cols[MONO_TYPEDEF_SIZE];
+			mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
 
-            const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
-            const char* name = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
+			const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
+			const char* name = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
 
-            out(std::format("{}.{}", nameSpace, ".", + name));
-        }
-    }
+			out(std::format("{}.{}", nameSpace, ".", + name));
+		}
+	}
 
-    std::string MonoStringToString(MonoString* string) {
-        char* cStr = mono_string_to_utf8(string);
-        std::string str{cStr};
-        mono_free(cStr);
-        return str;
-    }
+	std::string MonoStringToString(MonoString* string) {
+		char* cStr = mono_string_to_utf8(string);
+		std::string str{cStr};
+		mono_free(cStr);
+		return str;
+	}
 
-    ValueType MonoTypeToValueType(const char* typeName) {
-        using enum ValueType;
-        static std::unordered_map<std::string_view, ValueType> valueTypeMap = {
-            { "System.Void", Void },
-            { "System.Boolean", Bool },
-            { "System.Char", Char8 },
-            { "System.SByte", Int8 },
-            { "System.Int16", Int16 },
-            { "System.Int32", Int32 },
-            { "System.Int64", Int64 },
-            { "System.Byte", Uint8 },
-            { "System.UInt16", Uint16 },
-            { "System.UInt32", Uint32 },
-            { "System.UInt64", Uint64 },
-            { "System.IntPtr", Ptr64 },
-            { "System.UIntPtr", Ptr64 },
-            { "System.Single", Float },
-            { "System.Double", Double },
-            { "System.String", String },
-        };
-        auto it = valueTypeMap.find(typeName);
-        if (it != valueTypeMap.end())
-            return std::get<ValueType>(*it);
-        return Invalid;
-    }
+	ValueType MonoTypeToValueType(const char* typeName) {
+		using enum ValueType;
+		static std::unordered_map<std::string_view, ValueType> valueTypeMap = {
+			{ "System.Void", Void },
+			{ "System.Boolean", Bool },
+			{ "System.Char", Char8 },
+			{ "System.SByte", Int8 },
+			{ "System.Int16", Int16 },
+			{ "System.Int32", Int32 },
+			{ "System.Int64", Int64 },
+			{ "System.Byte", Uint8 },
+			{ "System.UInt16", Uint16 },
+			{ "System.UInt32", Uint32 },
+			{ "System.UInt64", Uint64 },
+			{ "System.IntPtr", Ptr64 },
+			{ "System.UIntPtr", Ptr64 },
+			{ "System.Single", Float },
+			{ "System.Double", Double },
+			{ "System.String", String },
+		};
+		auto it = valueTypeMap.find(typeName);
+		if (it != valueTypeMap.end())
+			return std::get<ValueType>(*it);
+		return Invalid;
+	}
 
-    std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
-        std::vector<std::string_view> output;
-        size_t first = 0;
+	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
+		std::vector<std::string_view> output;
+		size_t first = 0;
 
-        while (first < strv.size()) {
-            const size_t second = strv.find_first_of(delims, first);
+		while (first < strv.size()) {
+			const size_t second = strv.find_first_of(delims, first);
 
-            if (first != second)
-                output.emplace_back(strv.substr(first, second-first));
+			if (first != second)
+				output.emplace_back(strv.substr(first, second-first));
 
-            if (second == std::string_view::npos)
-                break;
+			if (second == std::string_view::npos)
+				break;
 
-            first = second + 1;
-        }
+			first = second + 1;
+		}
 
-        return output;
-    }
+		return output;
+	}
 }
 
 InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, const IModule& m) {
-    if (!(_provider = provider.lock()))
-        return ErrorData{ "Provider not exposed" };
+	if (!(_provider = provider.lock()))
+		return ErrorData{ "Provider not exposed" };
 
-    InitMono(m.GetBaseDir() / "mono/lib");
+	InitMono(m.GetBaseDir() / "mono/lib");
 
-    ScriptGlue::RegisterFunctions();
+	ScriptGlue::RegisterFunctions();
 
-    _rt = std::make_shared<asmjit::JitRuntime>();
+	_rt = std::make_shared<asmjit::JitRuntime>();
 
-    // Create an app domain
-    char appName[] = "WandMonoRuntime";
-    _appDomain = mono_domain_create_appdomain(appName, nullptr);
-    mono_domain_set(_appDomain, true);
+	// Create an app domain
+	char appName[] = "WandMonoRuntime";
+	_appDomain = mono_domain_create_appdomain(appName, nullptr);
+	mono_domain_set(_appDomain, true);
 
-    fs::path coreAssemblyPath{ m.GetBinariesDir() / "Wand.dll" };
+	fs::path coreAssemblyPath{ m.GetBinariesDir() / "Wand.dll" };
 
-    // Load a core assembly
-    MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-    _coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging, status);
-    if (!_coreAssembly)
-        return ErrorData{std::format("Failed to load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
+	// Load a core assembly
+	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+	_coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging, status);
+	if (!_coreAssembly)
+		return ErrorData{std::format("Failed to load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
 
-    _coreImage = mono_assembly_get_image(_coreAssembly);
-    if (!_coreImage)
-        return ErrorData{std::format("Failed to load '{}' core image.", coreAssemblyPath.string())};
+	_coreImage = mono_assembly_get_image(_coreAssembly);
+	if (!_coreImage)
+		return ErrorData{std::format("Failed to load '{}' core image.", coreAssemblyPath.string())};
 
-    // Retrieve and cache core classes/methods
+	// Retrieve and cache core classes/methods
 
-    /// Plugin
-    MonoClass* pluginClass = CacheCoreClass("Plugin");
-    if (!pluginClass)
-        return ErrorData{std::format("Failed to find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string())};
+	/// Plugin
+	MonoClass* pluginClass = CacheCoreClass("Plugin");
+	if (!pluginClass)
+		return ErrorData{std::format("Failed to find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string())};
 
-    MonoMethod* pluginCtor = CacheCoreMethod(pluginClass, ".ctor", 8);
-    if (!pluginCtor)
-        return ErrorData{std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string())};
+	MonoMethod* pluginCtor = CacheCoreMethod(pluginClass, ".ctor", 8);
+	if (!pluginCtor)
+		return ErrorData{std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string())};
 
-    /// IPluginListener
-    /*{
-        MonoClass* serverListener = CacheCoreClass("IPluginListener");
-        CacheCoreMethod(serverListener, "OnPluginCreate", 0);
-        CacheCoreMethod(serverListener, "OnPluginStart", 0);
-        CacheCoreMethod(serverListener, "OnPluginEnd", 0);
-        CacheCoreMethod(serverListener, "OnPluginDestroy", 0);
-    }*/
+	/// IPluginListener
+	/*{
+		MonoClass* serverListener = CacheCoreClass("IPluginListener");
+		CacheCoreMethod(serverListener, "OnPluginCreate", 0);
+		CacheCoreMethod(serverListener, "OnPluginStart", 0);
+		CacheCoreMethod(serverListener, "OnPluginEnd", 0);
+		CacheCoreMethod(serverListener, "OnPluginDestroy", 0);
+	}*/
 
-    _provider->Log("[CSHARPLM] Inited!", Severity::Debug);
+	_provider->Log("[CSHARPLM] Inited!", Severity::Debug);
 
-    return InitResultData{};
+	return InitResultData{};
 }
 
 void ScriptEngine::Shutdown() {
-    _coreClasses.clear();
-    _coreMethods.clear();
-    _exportMethods.clear();
-    _importMethods.clear();
-    _functions.clear();
-    _scripts.clear();
-    _provider.reset();
-    _rt.reset();
+	_coreClasses.clear();
+	_coreMethods.clear();
+	_exportMethods.clear();
+	_importMethods.clear();
+	_functions.clear();
+	_scripts.clear();
+	_provider.reset();
+	_rt.reset();
 
-    ShutdownMono();
+	ShutdownMono();
 }
 
 void ScriptEngine::InitMono(const fs::path& monoPath) {
-    mono_set_assemblies_path(monoPath.string().c_str());
+	mono_set_assemblies_path(monoPath.string().c_str());
 
-    if (_enableDebugging) {
-        const char* argv[2] = {
-            "--debugger-agent=transport=dt_socket,address=127.0.0.1:2550,server=y,suspend=n,loglevel=3,logfile=MonoDebugger.log",
-            "--soft-breakpoints"
-        };
+	if (_enableDebugging) {
+		const char* argv[2] = {
+			"--debugger-agent=transport=dt_socket,address=127.0.0.1:2550,server=y,suspend=n,loglevel=3,logfile=MonoDebugger.log",
+			"--soft-breakpoints"
+		};
 
-        mono_jit_parse_options(2, (char**)argv);
-        mono_debug_init(MONO_DEBUG_FORMAT_MONO);
-    }
+		mono_jit_parse_options(2, (char**)argv);
+		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
+	}
 
-    _rootDomain = mono_jit_init("WandJITRuntime");
-    if (!_rootDomain) {
-        _provider->Log("Initialization of mono failed", Severity::Error);
-        return;
-    }
+	_rootDomain = mono_jit_init("WandJITRuntime");
+	if (!_rootDomain) {
+		_provider->Log("Initialization of mono failed", Severity::Error);
+		return;
+	}
 
-    if (_enableDebugging)
-        mono_debug_domain_create(_rootDomain);
+	if (_enableDebugging)
+		mono_debug_domain_create(_rootDomain);
 
-    mono_thread_set_main(mono_thread_current());
+	mono_thread_set_main(mono_thread_current());
 }
 
 void ScriptEngine::ShutdownMono() {
-    mono_domain_set(mono_get_root_domain(), false);
+	mono_domain_set(mono_get_root_domain(), false);
 
-    if (_appDomain) {
-        mono_domain_unload(_appDomain);
-        _appDomain = nullptr;
-    }
+	if (_appDomain) {
+		mono_domain_unload(_appDomain);
+		_appDomain = nullptr;
+	}
 
-    if (_rootDomain) {
-        mono_jit_cleanup(_rootDomain);
-        _rootDomain = nullptr;
-    }
+	if (_rootDomain) {
+		mono_jit_cleanup(_rootDomain);
+		_rootDomain = nullptr;
+	}
 
-    _coreAssembly = nullptr;
-    _coreImage = nullptr;
+	_coreAssembly = nullptr;
+	_coreImage = nullptr;
 }
 
 void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
-    const auto& exportMethods = g_charplm._exportMethods;
-    auto it = exportMethods.find(method->funcName);
-    if (it == exportMethods.end()) {
-        printf("Method not found!\n");
-        return;
-    }
+	const auto& exportMethods = g_charplm._exportMethods;
+	auto it = exportMethods.find(method->funcName);
+	if (it == exportMethods.end()) {
+		g_charplm._provider->Log(std::format("Method '{}' not found!", method->funcName), Severity::Error);
+		return;
+	}
 
-    /// We not create param vector, and use Parameters* params directly if passing primitives
-    std::vector<void*> args;
-    args.reserve(count);
+	/// We not create param vector, and use Parameters* params directly if passing primitives
+	std::vector<void*> args;
+	args.reserve(count);
 
-    for (uint8_t i = 0; i < count; ++i) {
-        using enum ValueType;
-        switch (method->paramTypes[i]) {
-            case Invalid:
-            case Void:
-                // Should not trigger!
-                break;
-            case Bool:
-            case Char8:
-            case Char16:
-            case Int8:
-            case Int16:
-            case Int32:
-            case Int64:
-            case Uint8:
-            case Uint16:
-            case Uint32:
-            case Uint64:
-            case Ptr64:
-            case Float:
-            case Double:
-                args.push_back(p->GetArgumentPtr(i));
-                break;
-            case String: {
-                auto str = p->GetArgument<std::string*>(i);
-                args.push_back(str != nullptr ? g_charplm.CreateString(*str) : nullptr);
-                break;
-            }
-        }
-    }
+	for (uint8_t i = 0; i < count; ++i) {
+		using enum ValueType;
+		switch (method->paramTypes[i]) {
+			case Invalid:
+			case Void:
+				// Should not trigger!
+				break;
+			case Bool:
+			case Char8:
+			case Char16:
+			case Int8:
+			case Int16:
+			case Int32:
+			case Int64:
+			case Uint8:
+			case Uint16:
+			case Uint32:
+			case Uint64:
+			case Ptr64:
+			case Float:
+			case Double:
+				args.push_back(p->GetArgumentPtr(i));
+				break;
+			case String: {
+				auto str = p->GetArgument<std::string*>(i);
+				args.push_back(str != nullptr ? g_charplm.CreateString(*str) : nullptr);
+				break;
+			}
+		}
+	}
 
-    MonoObject* exception = nullptr;
-    MonoObject* result = mono_runtime_invoke(std::get<MonoMethod*>(*it), nullptr, args.data(), &exception);
-    if (exception) {
-        mono_print_unhandled_exception(exception);
-        return;
-    }
+	MonoObject* exception = nullptr;
+	MonoObject* result = mono_runtime_invoke(std::get<MonoMethod*>(*it), nullptr, args.data(), &exception);
+	if (exception) {
+		mono_print_unhandled_exception(exception);
+		return;
+	}
 
-    using enum ValueType;
-    switch (method->retType) {
-        case Invalid:
-        case Void:
-            break;
-        case Bool: {
-            bool val = *(bool*) mono_object_unbox(result);
-            ret->SetReturnPtr<bool>(val);
-            break;
-        }
-        case Char8: {
-            char val = *(char*) mono_object_unbox(result);
-            ret->SetReturnPtr<char>(val);
-            break;
-        }
-        case Char16: {
-            wchar_t val = *(wchar_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<wchar_t>(val);
-            break;
-        }
-        case Int8: {
-            int8_t val = *(int8_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<int8_t>(val);
-            break;
-        }
-        case Int16: {
-            int16_t val = *(int16_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<int16_t>(val);
-            break;
-        }
-        case Int32: {
-            int32_t val = *(int32_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<int32_t>(val);
-            break;
-        }
-        case Int64: {
-            int64_t val = *(int64_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<int64_t>(val);
-            break;
-        }
-        case Uint8: {
-            uint8_t val = *(uint8_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<uint8_t>(val);
-            break;
-        }
-        case Uint16: {
-            uint16_t val = *(uint16_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<uint16_t>(val);
-            break;
-        }
-        case Uint32: {
-            uint32_t val = *(uint32_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<uint32_t>(val);
-            break;
-        }
-        case Uint64: {
-            uint64_t val = *(uint64_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<uint64_t>(val);
-            break;
-        }
-        case Ptr64: {
-            uintptr_t val = *(uintptr_t*) mono_object_unbox(result);
-            ret->SetReturnPtr<uintptr_t>(val);
-            break;
-        }
-        case Float: {
-            float val = *(float*) mono_object_unbox(result);
-            ret->SetReturnPtr<float>(val);
-            break;
-        }
-        case Double: {
-            double val = *(double*) mono_object_unbox(result);
-            ret->SetReturnPtr<double>(val);
-            break;
-        }
-        case String: {
-            // TODO: How return string ?
-            break;
-        }
-    }
+	using enum ValueType;
+	switch (method->retType) {
+		case Invalid:
+		case Void:
+			break;
+		case Bool: {
+			bool val = *(bool*) mono_object_unbox(result);
+			ret->SetReturnPtr<bool>(val);
+			break;
+		}
+		case Char8: {
+			char val = *(char*) mono_object_unbox(result);
+			ret->SetReturnPtr<char>(val);
+			break;
+		}
+		case Char16: {
+			wchar_t val = *(wchar_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<wchar_t>(val);
+			break;
+		}
+		case Int8: {
+			int8_t val = *(int8_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<int8_t>(val);
+			break;
+		}
+		case Int16: {
+			int16_t val = *(int16_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<int16_t>(val);
+			break;
+		}
+		case Int32: {
+			int32_t val = *(int32_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<int32_t>(val);
+			break;
+		}
+		case Int64: {
+			int64_t val = *(int64_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<int64_t>(val);
+			break;
+		}
+		case Uint8: {
+			uint8_t val = *(uint8_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<uint8_t>(val);
+			break;
+		}
+		case Uint16: {
+			uint16_t val = *(uint16_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<uint16_t>(val);
+			break;
+		}
+		case Uint32: {
+			uint32_t val = *(uint32_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<uint32_t>(val);
+			break;
+		}
+		case Uint64: {
+			uint64_t val = *(uint64_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<uint64_t>(val);
+			break;
+		}
+		case Ptr64: {
+			uintptr_t val = *(uintptr_t*) mono_object_unbox(result);
+			ret->SetReturnPtr<uintptr_t>(val);
+			break;
+		}
+		case Float: {
+			float val = *(float*) mono_object_unbox(result);
+			ret->SetReturnPtr<float>(val);
+			break;
+		}
+		case Double: {
+			double val = *(double*) mono_object_unbox(result);
+			ret->SetReturnPtr<double>(val);
+			break;
+		}
+		case String: {
+			// TODO: How return string ?
+			break;
+		}
+	}
 }
 
 LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
-    MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-    MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _enableDebugging, status);
-    if (!assembly)
-        return ErrorData{std::format("Failed to load assembly: '{}'",mono_image_strerror(status))};
+	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _enableDebugging, status);
+	if (!assembly)
+		return ErrorData{std::format("Failed to load assembly: '{}'",mono_image_strerror(status))};
 
-    MonoImage* image = mono_assembly_get_image(assembly);
-    if (!image)
-        return ErrorData{std::format("Failed to load assembly image")};
+	MonoImage* image = mono_assembly_get_image(assembly);
+	if (!image)
+		return ErrorData{std::format("Failed to load assembly image")};
 
-    auto script = CreateScriptInstance(plugin, image);
-    if (!script.has_value())
-        return ErrorData{std::format("Failed to find 'Plugin' class implementation")};
+	auto script = CreateScriptInstance(plugin, image);
+	if (!script.has_value())
+		return ErrorData{std::format("Failed to find 'Plugin' class implementation")};
 
-    const auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
-    std::vector<MethodData> methods;
+	const auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
+	std::vector<MethodData> methods;
     methods.reserve(exportedMethods.size());
 
     std::vector<std::string> methodErrors;
