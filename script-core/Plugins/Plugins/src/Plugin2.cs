@@ -6,14 +6,6 @@ namespace Plugin2
     public class SamplePlugin : Plugin
     {
         /**
-         * Called when the plugin is created.
-         */
-        void OnCreate()
-        {
-            Console.Write($"{Name}: OnCreate\n");
-        }
-
-        /**
 		 * Called when the plugin is fully initialized and all known external dependencies.
 		 * This is only called once in the lifetime of the plugin, and is paired with OnEnd().
 		 */
@@ -28,14 +20,6 @@ namespace Plugin2
         void OnEnd()
         {
             Console.Write($"{Name}: OnEnd\n");
-        }
-
-        /**
-		 * Called when the plugin is about to be destroy.
-		 */
-        void OnDestroy()
-        {
-            Console.Write($"{Name}: OnDestroy\n");
         }
     }
 }
