@@ -380,75 +380,106 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
     if (!script.has_value())
         return ErrorData{std::format("Failed to find 'Plugin' class implementation")};
 
-    auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
-    LoadResultData loadResult;
-    loadResult.methods.reserve(exportedMethods.size());
+    const auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
+    std::vector<MethodData> methods;
+    methods.reserve(exportedMethods.size());
 
-    asmjit::JitRuntime rt;
-    std::vector<std::string> funcErrors;
+    std::vector<std::string> methodErrors;
 
     for (const auto& method : exportedMethods) {
         auto seperated = utils::Split(method.funcName, ".");
-        if (seperated.size() != 4)
-            return ErrorData{ std::format("Invalid function name: '{}'. Please provide name in that format: 'Plugin.Namespace.Class.Method'", method.funcName) };
+        if (seperated.size() != 4) {
+            methodErrors.emplace_back(std::format("Invalid function name: '{}'. Please provide name in that format: 'Plugin.Namespace.Class.Method'", method.funcName));
+            continue;
+        }
 
-        // Name of function in format ""
         std::string nameSpace{ seperated[1] };
         std::string className{ seperated[2] };
         std::string methodName{ seperated[3] };
 
         MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
-        if (!monoClass)
-            return ErrorData{ std::format("Failed to find class '{}.{}'", nameSpace, className) };
+        if (!monoClass) {
+            methodErrors.emplace_back(std::format("Failed to find class '{}.{}'", nameSpace, className));
+            continue;
+        }
 
         MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), -1);
-        if (!monoMethod)
-            return ErrorData{ std::format("Failed to find method '{}.{}::{}'", nameSpace, className, methodName) };
+        if (!monoMethod) {
+            methodErrors.emplace_back(std::format("Failed to find method '{}.{}::{}'", nameSpace, className, methodName));
+            continue;
+        }
 
         uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
-        if (!(methodFlags & MONO_METHOD_ATTR_STATIC))
-            return ErrorData{ std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName) };
+        if (!(methodFlags & MONO_METHOD_ATTR_STATIC)) {
+            methodErrors.emplace_back(std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName));
+            continue;
+        }
 
         MonoMethodSignature* sig = mono_method_signature(monoMethod);
 
         uint32_t paramCount = mono_signature_get_param_count(sig);
-        if (paramCount != method.paramTypes.size())
-            return ErrorData{ std::format("Invalid parameter count {} when it should have {}", method.paramTypes.size(), paramCount) };
+        if (paramCount != method.paramTypes.size()) {
+            methodErrors.emplace_back(std::format("Invalid parameter count {} when it should have {}", method.paramTypes.size(), paramCount));
+            continue;
+        }
 
         char* returnTypeName = mono_type_get_name(mono_signature_get_return_type(sig));
         ValueType returnType = utils::MonoTypeToValueType(returnTypeName);
-        if (returnType == ValueType::Invalid)
-            return ErrorData{ std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName) };
+        if (returnType == ValueType::Invalid) {
+            methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
+            continue;
+        }
 
-        if (returnType != method.retType)
-            return ErrorData{ std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'",
-                nameSpace, className, methodName, ValueTypeToString(method.retType), ValueTypeToString(returnType)) };
+        if (returnType != method.retType) {
+            methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType), ValueTypeToString(returnType)));
+            continue;
+        }
 
         size_t i = 0;
         void* iter = nullptr;
         while (MonoType* type = mono_signature_get_params(sig, &iter)) {
             char* paramTypeName = mono_type_get_name(type);
             ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
-            if (paramType == ValueType::Invalid)
-                return ErrorData{ std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName) };
+            if (paramType == ValueType::Invalid) {
+                methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
+                continue;
+            }
 
-            if (paramType != method.paramTypes[i])
-                return ErrorData{ std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'",
-                    nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i]), i, ValueTypeToString(paramType)) };
+            if (paramType != method.paramTypes[i]) {
+                methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i]), i, ValueTypeToString(paramType)));
+                continue;
+            }
 
             i++;
         }
 
         const auto [_, result] = _exportMethods.try_emplace(method.funcName, monoMethod);
-        if (!result)
-            return ErrorData{ std::format("Method name duplicate: ", method.funcName) };
+        if (!result) {
+            methodErrors.emplace_back(std::format("Function name duplicate: ", method.funcName));
+            continue;
+        }
 
-        auto jit = _functions.emplace_back(_rt).GetJitFunc(method, MethodCall);
+        Function function{_rt};
+        void* methodAddr = function.GetJitFunc(method, MethodCall);
+        if (!methodAddr) {
+            methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
+            continue;
+        }
+        _functions.emplace_back(std::move(function));
 
-        loadResult.methods.emplace_back(method.name, jit);
+        methods.emplace_back(method.name, methodAddr);
     }
 
-    return loadResult;
+    if (!methodErrors.empty()) {
+        std::ostringstream funcs;
+        funcs << methodErrors[0];
+        for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
+            funcs << ", " << *it;
+        }
+        return ErrorData{ funcs.str() };
+    }
+
+    return LoadResultData{ std::move(methods) };
 }
 
 void ScriptEngine::OnMethodExport(const IPlugin& plugin) {
