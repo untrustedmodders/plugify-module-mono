@@ -7,7 +7,7 @@ namespace csharplm {
 		CSharpLanguageModule() = default;
 	};
 
-	extern CSharpLanguageModule g_charplm;
+	extern CSharpLanguageModule g_csharplm;
 }
 
 extern "C" CSHARPLM_EXPORT wizard::ILanguageModule* GetLanguageModule();

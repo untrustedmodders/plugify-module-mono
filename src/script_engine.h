@@ -56,7 +56,7 @@ namespace csharplm {
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
-		void InitMono(const fs::path& monoPath);
+		bool InitMono(const fs::path& monoPath, const fs::path& configPath);
 		void ShutdownMono();
 
 		ScriptRef CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
@@ -66,6 +66,14 @@ namespace csharplm {
 
 		MonoClass* FindCoreClass(const std::string& name) const;
 		MonoMethod* FindCoreMethod(const std::string& name) const;
+
+		std::vector<std::string> LoadArguments(const fs::path& configPath);
+
+	private:
+		static void HandleException(MonoObject* exc, void* userData);
+		static void OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* userData);
+		static void OnPrintCallback(const char* message, mono_bool isStdout);
+		static void OnPrintErrorCallback(const char* message, mono_bool isStdout);
 
 		static void MethodCall(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* retVal);
 
@@ -86,11 +94,7 @@ namespace csharplm {
 
 		ScriptMap _scripts;
 
-#ifdef _DEBUG
-		bool _enableDebugging{ true };
-#else
 		bool _enableDebugging{ false };
-#endif
 
 		friend class ScriptInstance;
 	};

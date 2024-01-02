@@ -1,9 +1,9 @@
 #include "module.h"
 
 namespace csharplm {
-	CSharpLanguageModule g_charplm;
+	CSharpLanguageModule g_csharplm;
 }
 
 wizard::ILanguageModule* GetLanguageModule() {
-	return &csharplm::g_charplm;
+	return &csharplm::g_csharplm;
 }

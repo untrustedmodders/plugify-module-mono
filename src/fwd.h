@@ -10,6 +10,7 @@ extern "C" {
 	typedef struct _MonoArray MonoArray;
 	typedef struct _MonoString MonoString;
 	typedef struct _MonoDomain MonoDomain;
+	typedef int32_t mono_bool;
 }
 
 namespace wizard {
