@@ -1,0 +1,5 @@
+// Debugger makes the process connect to the debugging server. Warning: Failure to connect to a debugging server WILL result in a crash.
+--debugger-agent=transport=dt_socket,address=127.0.0.1:2550,server=y,suspend=n,loglevel=3,logfile=MonoDebugger.log
+
+// Prevents managed null reference exceptions causing crashes in unmanaged code
+--soft-breakpoints
