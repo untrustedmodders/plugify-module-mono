@@ -3,24 +3,40 @@
 #include "module.h"
 
 #include <mono/jit/jit.h>
+#include <mono/utils/mono-logger.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/object.h>
 #include <mono/metadata/class.h>
 #include <mono/metadata/attrdefs.h>
 #include <mono/metadata/mono-debug.h>
 #include <mono/metadata/threads.h>
+#include <mono/metadata/exception.h>
 
 #include <wizard/module.h>
 #include <wizard/plugin.h>
 #include <wizard/plugin_descriptor.h>
 #include <wizard/wizard_provider.h>
 
-#include <fstream>
+#include <glaze/glaze.hpp>
+
+#if WIZARD_PLATFORM_WINDOWS
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace csharplm;
 using namespace wizard;
 
 namespace csharplm::utils {
+	std::string ReadText(const fs::path& filepath) {
+		std::ifstream istream{filepath, std::ios::binary};
+		if (!istream)
+			return {};
+		istream.unsetf(std::ios::skipws);
+		return { std::istreambuf_iterator<char>{istream}, std::istreambuf_iterator<char>{} };
+	}
+
 	template<typename T>
 	inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
 		std::ifstream istream{file, std::ios::binary};
@@ -79,12 +95,14 @@ namespace csharplm::utils {
 		mono_free(cStr);
 		return str;
 	}
-	
+
 	std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
 		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
 		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
 		MonoString* messageString = (MonoString*) mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr);
-		return messageString != nullptr ? MonoStringToString(messageString) : {};
+		if (messageString != nullptr)
+			return MonoStringToString(messageString);
+		return {};
 	}
 
 	ValueType MonoTypeToValueType(const char* typeName) {
@@ -109,7 +127,7 @@ namespace csharplm::utils {
 		auto it = valueTypeMap.find(typeName);
 		if (it != valueTypeMap.end())
 			return std::get<ValueType>(*it);
-		return Invalid;
+		return ValueType::Invalid;
 	}
 
 	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
@@ -130,13 +148,27 @@ namespace csharplm::utils {
 
 		return output;
 	}
+
+	pid_t GetProcessId() {
+#ifdef WIZARD_PLATFORM_WINDOWS
+		return GetCurrentProcessId();
+#else
+		return getpid();
+#endif
+	}
 }
 
 InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, const IModule& m) {
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	if (!InitMono(m.GetBaseDir() / "mono/lib", m.GetBaseDir() / "config.txt"))
+	auto json = utils::ReadText(m.GetBaseDir() / "config.txt");
+	auto config = glz::read_json<MonoConfig>(json);
+	if (!config.has_value())
+		return ErrorData{ std::format("MonoConfig: 'config.txt' has JSON parsing error: {}", glz::format_error(config.error(), json)) };
+	_config = std::move(*config);
+
+	if (!InitMono(m.GetBaseDir() / "mono/lib"))
 		return ErrorData{ "Initialization of mono failed" };
 
 	ScriptGlue::RegisterFunctions();
@@ -152,7 +184,7 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, con
 
 	// Load a core assembly
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-	_coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _enableDebugging, status);
+	_coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _config.enableDebugging, status);
 	if (!_coreAssembly)
 		return ErrorData{ std::format("Failed to load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status)) };
 
@@ -202,7 +234,7 @@ void ScriptEngine::Shutdown() {
 	return OnMonoAssemblyLoad(mono_assembly_name_get_name(aname));
 }*/
 
-void ScriptEngine::InitMono(const fs::path& monoPath, const fs::path& configPath) {
+bool ScriptEngine::InitMono(const fs::path& monoPath) {
 	mono_trace_set_print_handler(OnPrintCallback);
 	mono_trace_set_printerr_handler(OnPrintErrorCallback);
 	mono_trace_set_log_handler(OnLogCallback, nullptr);
@@ -212,26 +244,29 @@ void ScriptEngine::InitMono(const fs::path& monoPath, const fs::path& configPath
 	// Seems we can write custom assembly loader here
 	//mono_install_assembly_preload_hook(OnMonoAssemblyPreloadHook, nullptr);
 
-	_enableDebugging = false;
-
-	auto arguments = LoadArguments(configPath);
-	if (!arguments.empty()) {
+	if (!_config.options.empty()) {
 		std::vector<char*> options;
-		options.reserve(arguments.size());
-		for (auto& argument : arguments) {
-			options.push_back(argument.data());
+		options.reserve(_config.options.size());
+		for (auto& opt : _config.options) {
+			options.push_back(opt.data());
+			if (opt.starts_with("--debugger"))
+				_provider->Log(std::format("Mono debugger: {}", opt), Severity::Info);
 		}
 		mono_jit_parse_options(static_cast<int>(options.size()), options.data());
 	}
 
-	if (_enableDebugging)
+	if (!_config.level.empty())
+		mono_trace_set_level_string(_config.level.c_str());
+	if (!_config.mask.empty())
+		mono_trace_set_mask_string(_config.mask.c_str());
+	if (_config.enableDebugging)
 		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
 
 	_rootDomain = mono_jit_init("WandJITRuntime");
 	if (!_rootDomain)
 		return false;
 
-	if (_enableDebugging)
+	if (_config.enableDebugging)
 		mono_debug_domain_create(_rootDomain);
 
 	mono_thread_set_main(mono_thread_current());
@@ -395,7 +430,7 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 
 LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _enableDebugging, status);
+	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _config.enableDebugging, status);
 	if (!assembly)
 		return ErrorData{ std::format("Failed to load assembly: '{}'",mono_image_strerror(status)) };
 
@@ -619,40 +654,19 @@ MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
 	return instance;
 }
 
-std::vector<std::string> ScriptEngine::LoadArguments(const fs::path& configPath) {
-	std::ifstream config{ configPath };
-	if (!config.is_open()) {
-		_provider->Log(std::format("Missing config file: '{}'", configPath.string()), Severity::Warning);
-		return {};
-	}
-	std::vector<std::string> args;
-	std::string line;
-	while (std::getline(config >> std::ws, line)) {
-		if (line.starts_with('-'))
-			args.push_back(line);
-		if (line.starts_with("--debugger") {
-			_enableDebugging = true;
-			_provider->Log(std::format("Mono debugger enabled: {}", line), Severity::Debug);
-		}
-	}
-	return args;
-}
-
-void ScriptEngine::HandleException(MonoObject* exc, void* userData) {
+void ScriptEngine::HandleException(MonoObject* exc, void* /* userData*/) {
 	if (!exc)
 		return;
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
-	MonoType* exceptionType = mono_class_get_type(exceptionClass);
-	//char* typeName = mono_type_get_name(exceptionType);
-	std::string message = GetStringProperty("Message", exceptionClass, exc);
-	std::string source = GetStringProperty("Source", exceptionClass, exc);
-	std::string stackTrace = GetStringProperty("StackTrace", exceptionClass, exc);
-	std::string targetSite = GetStringProperty("TargetSite", exceptionClass, exc);
-	g_csharplm._provider->Log(std::format("Message: {}\nSource: {}\n StackTrace: {}\n TargetSite: {}", message, source, stackTrace, targetSite), Severity::Error);
+	std::string message = utils::GetStringProperty("Message", exceptionClass, exc);
+	std::string source = utils::GetStringProperty("Source", exceptionClass, exc);
+	std::string stackTrace = utils::GetStringProperty("StackTrace", exceptionClass, exc);
+	std::string targetSite = utils::GetStringProperty("TargetSite", exceptionClass, exc);
+	g_csharplm._provider->Log(std::format("Message: {} | Source: {} | StackTrace: {} | TargetSite: {}", message, source, stackTrace, targetSite), Severity::Error);
 }
 
-void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* userData) {
+void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* /* userData*/) {
 	Severity severity = Severity::None;
 	if (logLevel != nullptr) {
 		switch (std::tolower(logLevel[0], std::locale{})) {
@@ -684,19 +698,15 @@ void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, co
 		domain = logDomain;
 	} else {
 		domain = mono_domain_get_friendly_name(g_csharplm._appDomain);
-		if (!domain || strlen(domain) == 0) {
-			domain = "[null]";
-		}
 	}
-
 	g_csharplm._provider->Log(std::format("Message: {} | Domain: {}", message, domain), fatal ? Severity::Fatal : severity);
 }
 
-void ScriptEngine::OnPrintCallback(const char* message, mono_bool isStdout) {
+void ScriptEngine::OnPrintCallback(const char* message, mono_bool /*isStdout*/) {
 	g_csharplm._provider->Log(message, Severity::Warning);
 }
 
-void ScriptEngine::OnPrintErrorCallback(const char* message, mono_bool isStdout) {
+void ScriptEngine::OnPrintErrorCallback(const char* message, mono_bool /*isStdout*/) {
 	g_csharplm._provider->Log(message, Severity::Error);
 }
 
@@ -739,7 +749,7 @@ void ScriptInstance::InvokeOnStart() const {
 		MonoObject* exception = nullptr;
 		mono_runtime_invoke(_onStartMethod, _instance, nullptr, &exception);
 		if (exception) {
-			HandleException(exception, nullptr);
+			ScriptEngine::HandleException(exception, nullptr);
 		}
 	}
 }
@@ -749,7 +759,7 @@ void ScriptInstance::InvokeOnEnd() const {
 		MonoObject* exception = nullptr;
 		mono_runtime_invoke(_onEndMethod, _instance, nullptr, &exception);
 		if (exception) {
-			HandleException(exception, nullptr);
+			ScriptEngine::HandleException(exception, nullptr);
 		}
 	}
 }

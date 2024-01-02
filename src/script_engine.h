@@ -6,7 +6,6 @@
 #include "fwd.h"
 
 namespace csharplm {
-
 	class ScriptEngine;
 
 	class ScriptInstance {
@@ -56,7 +55,7 @@ namespace csharplm {
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
-		bool InitMono(const fs::path& monoPath, const fs::path& configPath);
+		bool InitMono(const fs::path& monoPath);
 		void ShutdownMono();
 
 		ScriptRef CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
@@ -66,8 +65,6 @@ namespace csharplm {
 
 		MonoClass* FindCoreClass(const std::string& name) const;
 		MonoMethod* FindCoreMethod(const std::string& name) const;
-
-		std::vector<std::string> LoadArguments(const fs::path& configPath);
 
 	private:
 		static void HandleException(MonoObject* exc, void* userData);
@@ -94,7 +91,12 @@ namespace csharplm {
 
 		ScriptMap _scripts;
 
-		bool _enableDebugging{ false };
+		struct MonoConfig {
+			bool enableDebugging{};
+			std::string level;
+			std::string mask;
+			std::vector<std::string> options;
+		} _config;
 
 		friend class ScriptInstance;
 	};
