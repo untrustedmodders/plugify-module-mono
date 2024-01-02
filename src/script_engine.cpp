@@ -19,12 +19,6 @@
 
 #include <glaze/glaze.hpp>
 
-#if WIZARD_PLATFORM_WINDOWS
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
 using namespace csharplm;
 using namespace wizard;
 
@@ -147,14 +141,6 @@ namespace csharplm::utils {
 		}
 
 		return output;
-	}
-
-	pid_t GetProcessId() {
-#ifdef WIZARD_PLATFORM_WINDOWS
-		return GetCurrentProcessId();
-#else
-		return getpid();
-#endif
 	}
 }
 
