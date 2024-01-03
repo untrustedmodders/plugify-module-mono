@@ -117,7 +117,6 @@ namespace csharplm::utils {
 			{ "System.Single", ValueType::Float },
 			{ "System.Double", ValueType::Double },
 			{ "System.String", ValueType::String },
-			{ "System.IntPtr", ValueType::Function },
 		};
 		auto it = valueTypeMap.find(typeName);
 		if (it != valueTypeMap.end())
@@ -396,6 +395,7 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 			ret->SetReturnPtr<uint64_t>(val);
 			break;
 		}
+		case ValueType::Function:
 		case ValueType::Ptr64: {
 			uintptr_t val = *(uintptr_t*) mono_object_unbox(result);
 			ret->SetReturnPtr<uintptr_t>(val);
@@ -481,6 +481,10 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 			methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
 			continue;
 		}
+		
+		if (method.retType.type == ValueType::Function && returnType == ValueType::Ptr64) {
+			returnType = ValueType::Function;
+		}
 
 		if (returnType != method.retType.type) {
 			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType.type), ValueTypeToString(returnType)));
@@ -495,6 +499,10 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 			if (paramType == ValueType::Invalid) {
 				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
 				continue;
+			}
+			
+			if (method.paramTypes[i].type == ValueType::Function && paramType == ValueType::Ptr64) {
+				paramType = ValueType::Function; // special case
 			}
 
 			if (paramType != method.paramTypes[i].type) {
