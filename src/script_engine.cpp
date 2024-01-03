@@ -117,6 +117,7 @@ namespace csharplm::utils {
 			{ "System.Single", ValueType::Float },
 			{ "System.Double", ValueType::Double },
 			{ "System.String", ValueType::String },
+			{ "System.IntPtr", ValueType::Function },
 		};
 		auto it = valueTypeMap.find(typeName);
 		if (it != valueTypeMap.end())
@@ -227,6 +228,8 @@ bool ScriptEngine::InitMono(const fs::path& monoPath) {
 
 	mono_set_assemblies_path(monoPath.string().c_str());
 
+	mono_config_parse(nullptr);
+
 	// Seems we can write custom assembly loader here
 	//mono_install_assembly_preload_hook(OnMonoAssemblyPreloadHook, nullptr);
 
@@ -316,6 +319,7 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 			case ValueType::Ptr64:
 			case ValueType::Float:
 			case ValueType::Double:
+			case ValueType::Function:
 				args.push_back(p->GetArgumentPtr(i));
 				break;
 			case ValueType::String: {
