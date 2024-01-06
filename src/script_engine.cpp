@@ -9,6 +9,7 @@
 #include <mono/metadata/class.h>
 #include <mono/metadata/attrdefs.h>
 #include <mono/metadata/mono-debug.h>
+#include <mono/metadata/mono-config.h>
 #include <mono/metadata/threads.h>
 #include <mono/metadata/exception.h>
 
@@ -25,7 +26,7 @@ using namespace wizard;
 namespace csharplm::utils {
 	std::string ReadText(const fs::path& filepath) {
 		std::ifstream istream{filepath, std::ios::binary};
-		if (!istream)
+		if (!istream.is_open())
 			return {};
 		istream.unsetf(std::ios::skipws);
 		return { std::istreambuf_iterator<char>{istream}, std::istreambuf_iterator<char>{} };
@@ -34,7 +35,7 @@ namespace csharplm::utils {
 	template<typename T>
 	inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
 		std::ifstream istream{file, std::ios::binary};
-		if (!istream)
+		if (!istream.is_open())
 			return false;
 		std::vector<T> buffer{ std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
 		callback({ buffer.data(), buffer.size() });
@@ -236,9 +237,11 @@ bool ScriptEngine::InitMono(const fs::path& monoPath) {
 		std::vector<char*> options;
 		options.reserve(_config.options.size());
 		for (auto& opt : _config.options) {
-			options.push_back(opt.data());
-			if (opt.starts_with("--debugger"))
-				_provider->Log(std::format("Mono debugger: {}", opt), Severity::Info);
+			if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
+				options.push_back(opt.data());
+				if (opt.starts_with("--debugger"))
+					_provider->Log(std::format("Mono debugger: {}", opt), Severity::Info);
+			}
 		}
 		mono_jit_parse_options(static_cast<int>(options.size()), options.data());
 	}
