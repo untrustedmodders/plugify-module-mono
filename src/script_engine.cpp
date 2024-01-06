@@ -149,10 +149,10 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, con
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	auto json = utils::ReadText(m.GetBaseDir() / "config.txt");
+	auto json = utils::ReadText(m.GetBaseDir() / "config.json");
 	auto config = glz::read_json<MonoConfig>(json);
 	if (!config.has_value())
-		return ErrorData{ std::format("MonoConfig: 'config.txt' has JSON parsing error: {}", glz::format_error(config.error(), json)) };
+		return ErrorData{ std::format("MonoConfig: 'config.json' has JSON parsing error: {}", glz::format_error(config.error(), json)) };
 	_config = std::move(*config);
 
 	if (!InitMono(m.GetBaseDir() / "mono/lib"))
