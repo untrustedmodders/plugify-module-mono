@@ -12,7 +12,7 @@
     "assemblyPath": "${PLUGIN_PATH}",
     "supportedPlatforms": [],
     "languageModule": {
-     "name": "csharp-lang-module"
+     "name": "csharp"
     },
     "dependencies": []
 }
