@@ -31,7 +31,7 @@ namespace csharplm {
 	};
 
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
-	using ScriptRef = std::optional<std::reference_wrapper<ScriptInstance>>;
+	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
 
 	class ScriptEngine :  public wizard::ILanguageModule {
 	public:
@@ -47,7 +47,7 @@ namespace csharplm {
 		void OnMethodExport(const wizard::IPlugin& plugin) override;
 
 		const ScriptMap& GetScripts() const { return _scripts; }
-		ScriptRef FindScript(const std::string& name);
+		ScriptOpt FindScript(const std::string& name);
 
 		MonoString* CreateString(std::string_view string) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
@@ -58,7 +58,7 @@ namespace csharplm {
 		bool InitMono(const fs::path& monoPath);
 		void ShutdownMono();
 
-		ScriptRef CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
+		ScriptOpt CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
 
 		MonoClass* CacheCoreClass(std::string name);
 		MonoMethod* CacheCoreMethod(MonoClass* klass, std::string name, int params);

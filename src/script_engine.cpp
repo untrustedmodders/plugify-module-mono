@@ -293,7 +293,8 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 	const auto& exportMethods = g_csharplm._exportMethods;
 	auto it = exportMethods.find(method->funcName);
 	if (it == exportMethods.end()) {
-		g_csharplm._provider->Log(std::format("Method '{}' not found!", method->funcName), Severity::Error);
+		if (g_csharplm._provider)
+			g_csharplm._provider->Log(std::format("Method '{}' not found!", method->funcName), Severity::Error);
 		return;
 	}
 
@@ -560,20 +561,20 @@ void ScriptEngine::OnMethodExport(const IPlugin& plugin) {
 }
 
 void ScriptEngine::OnPluginStart(const IPlugin& plugin) {
-	ScriptRef script = FindScript(plugin.GetName());
+	ScriptOpt script = FindScript(plugin.GetName());
 	if (script.has_value()) {
 		script->get().InvokeOnStart();
 	}
 }
 
 void ScriptEngine::OnPluginEnd(const IPlugin& plugin) {
-	ScriptRef script = FindScript(plugin.GetName());
+	ScriptOpt script = FindScript(plugin.GetName());
 	if (script.has_value()) {
 		script->get().InvokeOnEnd();
 	}
 }
 
-ScriptRef ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* image) {
+ScriptOpt ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* image) {
 	MonoClass* pluginClass = FindCoreClass("Plugin");
 
 	const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
@@ -602,7 +603,7 @@ ScriptRef ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* i
 	return std::nullopt;
 }
 
-ScriptRef ScriptEngine::FindScript(const std::string& name) {
+ScriptOpt ScriptEngine::FindScript(const std::string& name) {
 	auto it = _scripts.find(name);
 	if (it != _scripts.end())
 		return std::get<ScriptInstance>(*it);
@@ -656,7 +657,7 @@ MonoObject* ScriptEngine::InstantiateClass(MonoClass* klass) const {
 }
 
 void ScriptEngine::HandleException(MonoObject* exc, void* /* userData*/) {
-	if (!exc)
+	if (!exc || !g_csharplm._provider)
 		return;
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
@@ -668,6 +669,9 @@ void ScriptEngine::HandleException(MonoObject* exc, void* /* userData*/) {
 }
 
 void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* /* userData*/) {
+	if (!g_csharplm._provider)
+		return;
+
 	Severity severity = Severity::None;
 	if (logLevel != nullptr) {
 		switch (std::tolower(logLevel[0], std::locale{})) {
@@ -704,11 +708,13 @@ void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, co
 }
 
 void ScriptEngine::OnPrintCallback(const char* message, mono_bool /*isStdout*/) {
-	g_csharplm._provider->Log(message, Severity::Warning);
+	if (g_csharplm._provider)
+		g_csharplm._provider->Log(message, Severity::Warning);
 }
 
 void ScriptEngine::OnPrintErrorCallback(const char* message, mono_bool /*isStdout*/) {
-	g_csharplm._provider->Log(message, Severity::Error);
+	if (g_csharplm._provider)
+		g_csharplm._provider->Log(message, Severity::Error);
 }
 
 /*_________________________________________________*/
