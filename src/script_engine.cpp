@@ -12,9 +12,11 @@
 #include <mono/metadata/mono-config.h>
 #include <mono/metadata/threads.h>
 #include <mono/metadata/exception.h>
+#include <asmjit/asmjit.h>
 
 #include <wizard/module.h>
 #include <wizard/plugin.h>
+#include <wizard/log.h>
 #include <wizard/plugin_descriptor.h>
 #include <wizard/wizard_provider.h>
 

@@ -15,6 +15,8 @@ namespace Plugin1
 {
 	public class SamplePlugin : Plugin
     {
+	    public delegate long MyFunc(int a, float b, double c);
+	    
 		/**
 		 * Called when the plugin is fully initialized and all known external dependencies.
 		 * This is only called once in the lifetime of the plugin, and is paired with OnEnd().
@@ -22,7 +24,7 @@ namespace Plugin1
 		void OnStart()
 		{
 			Console.Write($"{Name}: OnStart\n");
-			example_plugin.example_plugin.MakePrint(3);
+			//example_plugin.example_plugin.MakePrint(3);
 		}
 
 		/**
@@ -38,6 +40,12 @@ namespace Plugin1
 		    Console.Write("I believe that what doesn't kill you makes you... stranger!!! \n");
 		    Console.Write($"{a}, {b}, {c}");
 		    return 1337;
+		}
+		
+		public static long MyExportDelegate(MyFunc func)
+		{
+			var ret = func(1, 2, 3);
+			return ret;
 		}
     }
 }

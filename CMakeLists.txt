@@ -27,14 +27,14 @@ option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
 #
 # C# Language Module for Wizard
 #
-file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp" external/wizard/include/wizard/function.cpp)
+file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
 set(CSHARPLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
 include_directories(SYSTEM "${MONO_INCLUDE_DIRS}")
 target_link_directories(${PROJECT_NAME} PUBLIC ${MONO_LIBRARY_DIRS})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${MONO_LIBRARIES} wizard)
+target_link_libraries(${PROJECT_NAME} PUBLIC ${MONO_LIBRARIES} wizard glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:wizard-function>)
 target_precompile_headers(${PROJECT_NAME} PUBLIC ${CSHARPLM_PCH_FILE})
 
 include(GenerateExportHeader)
