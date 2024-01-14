@@ -17,7 +17,6 @@ set(CMAKE_C_EXTENSIONS OFF)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MONO REQUIRED mono-2)
 
-set(WIZARD_BUILD_SHARED_LIB ON CACHE INTERNAL "")
 add_subdirectory(external/wizard)
 
 #
