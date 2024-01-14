@@ -27,7 +27,7 @@ using namespace wizard;
 
 namespace csharplm::utils {
 	std::string ReadText(const fs::path& filepath) {
-		std::ifstream istream{filepath, std::ios::binary};
+		std::ifstream istream(filepath, std::ios::binary);
 		if (!istream.is_open())
 			return {};
 		istream.unsetf(std::ios::skipws);
@@ -36,7 +36,7 @@ namespace csharplm::utils {
 
 	template<typename T>
 	inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
-		std::ifstream istream{file, std::ios::binary};
+		std::ifstream istream(file, std::ios::binary);
 		if (!istream.is_open())
 			return false;
 		std::vector<T> buffer{ std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
@@ -55,7 +55,7 @@ namespace csharplm::utils {
 			return nullptr;
 
 		if (loadPDB) {
-			fs::path pdbPath{ assemblyPath };
+			fs::path pdbPath(assemblyPath);
 			pdbPath.replace_extension(".pdb");
 
 			ReadBytes<mono_byte>(pdbPath, [&image](std::span<mono_byte> buffer) {
@@ -88,7 +88,7 @@ namespace csharplm::utils {
 
 	std::string MonoStringToString(MonoString* string) {
 		char* cStr = mono_string_to_utf8(string);
-		std::string str{cStr};
+		std::string str(cStr);
 		mono_free(cStr);
 		return str;
 	}
@@ -451,9 +451,9 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 			continue;
 		}
 
-		std::string nameSpace{ seperated[1] };
-		std::string className{ seperated[2] };
-		std::string methodName{ seperated[3] };
+		std::string nameSpace(seperated[1]);
+		std::string className(seperated[2]);
+		std::string methodName(seperated[3]);
 
 		MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
 		if (!monoClass) {
@@ -525,7 +525,7 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 			continue;
 		}
 
-		Function function{_rt};
+		Function function(_rt);
 		void* methodAddr = function.GetJitFunc(method, MethodCall);
 		if (!methodAddr) {
 			methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
@@ -597,7 +597,7 @@ ScriptOpt ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* i
 		if (!isPlugin)
 			continue;
 
-		const auto [it, result] = _scripts.try_emplace(plugin.GetName(), ScriptInstance{ *this, plugin, monoClass });
+		const auto [it, result] = _scripts.try_emplace(plugin.GetName(), ScriptInstance(*this, plugin, monoClass));
 		if (result)
 			return std::get<ScriptInstance>(*it);
 	}
