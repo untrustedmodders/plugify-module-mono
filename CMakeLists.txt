@@ -14,9 +14,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(MONO REQUIRED mono-2)
-
 add_subdirectory(external/wizard)
 
 #
@@ -32,9 +29,13 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
-include_directories(SYSTEM "${MONO_INCLUDE_DIRS}")
-target_link_directories(${PROJECT_NAME} PUBLIC ${MONO_LIBRARY_DIRS})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${MONO_LIBRARIES} wizard glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:wizard-function>)
+add_library(mono STATIC IMPORTED)
+set_target_properties(mono PROPERTIES
+        IMPORTED_LOCATION_DEBUG external/mono/lib/debug/libmono-static-sgen.lib
+        IMPORTED_LOCATION_RELEASE external/mono/lib/release/libmono-static-sgen.lib)
+
+target_link_directories(${PROJECT_NAME} PUBLIC external/mono/include)
+target_link_libraries(${PROJECT_NAME} PUBLIC mono} wizard glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:wizard-function>)
 target_precompile_headers(${PROJECT_NAME} PUBLIC ${CSHARPLM_PCH_FILE})
 
 include(GenerateExportHeader)
