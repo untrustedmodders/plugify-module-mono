@@ -22,6 +22,20 @@ add_subdirectory(external/wizard)
 option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
 
 #
+# Mono
+#
+set(MONO_LIBRARY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/lib)
+#set(MONO_LIBS eglib libgcmonosgen libmini-sgen libmonoruntime-sgen libmono-static-sgen libmonoutils mono-2.0-sgen MonoPosixHelper)
+set(MONO_LIBS libmono-static-sgen)
+foreach(library ${MONO_LIBS})
+    add_library(${library} STATIC IMPORTED)
+    set_target_properties(${library} PROPERTIES
+            IMPORTED_LOCATION_DEBUG ${MONO_LIBRARY_PATH}/Debug/${library}.lib
+            IMPORTED_LOCATION_RELEASE ${MONO_LIBRARY_PATH}Release/${library}.lib)
+endforeach()
+set(MONO_LIBS ${MONO_LIBS} ws2_32.lib winmm.lib version.lib bcrypt.lib)
+
+#
 # C# Language Module for Wizard
 #
 file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
@@ -29,14 +43,9 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
-add_library(mono STATIC IMPORTED)
-set_target_properties(mono PROPERTIES
-        IMPORTED_LOCATION_DEBUG external/mono/lib/debug/libmono-static-sgen.lib
-        IMPORTED_LOCATION_RELEASE external/mono/lib/release/libmono-static-sgen.lib)
-
-target_link_directories(${PROJECT_NAME} PUBLIC external/mono/include)
-target_link_libraries(${PROJECT_NAME} PUBLIC mono} wizard glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:wizard-function>)
-target_precompile_headers(${PROJECT_NAME} PUBLIC ${CSHARPLM_PCH_FILE})
+include_directories(external/mono/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} wizard glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:wizard-function>)
+target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
 
 include(GenerateExportHeader)
 generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
