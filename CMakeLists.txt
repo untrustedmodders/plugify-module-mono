@@ -19,7 +19,7 @@ add_subdirectory(external/wizard)
 #
 # Options
 #
-option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
+option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" OFF)
 
 #
 # Mono
@@ -30,10 +30,12 @@ set(MONO_LIBS libmono-static-sgen)
 foreach(library ${MONO_LIBS})
     add_library(${library} STATIC IMPORTED)
     set_target_properties(${library} PROPERTIES
-            IMPORTED_LOCATION_DEBUG ${MONO_LIBRARY_PATH}/Debug/${library}.lib
-            IMPORTED_LOCATION_RELEASE ${MONO_LIBRARY_PATH}Release/${library}.lib)
+            IMPORTED_LOCATION_DEBUG "${MONO_LIBRARY_PATH}/Debug/${library}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            IMPORTED_LOCATION_RELEASE "${MONO_LIBRARY_PATH}/Release/${library}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 endforeach()
-set(MONO_LIBS ${MONO_LIBS} ws2_32.lib winmm.lib version.lib bcrypt.lib)
+if(WIN32)
+    set(MONO_LIBS ${MONO_LIBS} ws2_32.lib winmm.lib version.lib bcrypt.lib)
+endif()
 
 #
 # C# Language Module for Wizard

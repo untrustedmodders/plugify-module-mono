@@ -506,7 +506,7 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
 				continue;
 			}
-			
+
 			if (method.paramTypes[i].type == ValueType::Function && paramType == ValueType::Ptr64) {
 				paramType = ValueType::Function; // special case
 			}
@@ -538,7 +538,7 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 
 	if (!methodErrors.empty()) {
 		std::ostringstream funcs;
-		funcs << methodErrors[0];
+		funcs << *methodErrors.begin();
 		for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
 			funcs << ", " << *it;
 		}
