@@ -538,7 +538,7 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 
 	if (!methodErrors.empty()) {
 		std::ostringstream funcs;
-		funcs << *methodErrors.begin();
+		funcs << methodErrors[0];
 		for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
 			funcs << ", " << *it;
 		}
