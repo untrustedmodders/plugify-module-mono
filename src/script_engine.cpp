@@ -120,6 +120,21 @@ namespace csharplm::utils {
 			{ "System.Single", ValueType::Float },
 			{ "System.Double", ValueType::Double },
 			{ "System.String", ValueType::String },
+			{ "System.Boolean[]", ValueType::ArrayBool },
+			{ "System.Char[]", ValueType::ArrayChar8 },
+			{ "System.SByte[]", ValueType::ArrayInt8 },
+			{ "System.Int16[]", ValueType::ArrayInt16 },
+			{ "System.Int32[]", ValueType::ArrayInt32 },
+			{ "System.Int64[]", ValueType::ArrayInt64 },
+			{ "System.Byte[]", ValueType::ArrayUint8 },
+			{ "System.UInt16[]", ValueType::ArrayUint16 },
+			{ "System.UInt32[]", ValueType::ArrayUint32 },
+			{ "System.UInt64[]", ValueType::ArrayUint64 },
+			{ "System.IntPtr[]", ValueType::ArrayPtr64 },
+			{ "System.UIntPtr[]", ValueType::ArrayPtr64 },
+			{ "System.Single[]", ValueType::ArrayFloat },
+			{ "System.Double[]", ValueType::ArrayDouble },
+			{ "System.String[]", ValueType::ArrayString },
 		};
 		auto it = valueTypeMap.find(typeName);
 		if (it != valueTypeMap.end())
@@ -291,6 +306,15 @@ void ScriptEngine::ShutdownMono() {
 	_coreImage = nullptr;
 }
 
+template<typename T, typename C>
+MonoArray* CreateArray(std::span<T> data, C& klass) {
+	MonoArray* array = g_csharplm.CreateArray(klass(), data.size());
+	for (size_t i = 0; i < data.size(); ++i) {
+		mono_array_set(array, T, i, data[i]);
+	}
+	return array;
+}
+
 void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
 	const auto& exportMethods = g_csharplm._exportMethods;
 	auto it = exportMethods.find(method->funcName);
@@ -305,7 +329,8 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 	args.reserve(count);
 
 	for (uint8_t i = 0; i < count; ++i) {
-		switch (method->paramTypes[i].type) {
+		auto& param = method->paramTypes[i];
+		switch (param.type) {
 			case ValueType::Invalid:
 			case ValueType::Void:
 				// Should not trigger!
@@ -328,8 +353,98 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 				args.push_back(p->GetArgumentPtr(i));
 				break;
 			case ValueType::String: {
-				auto str = p->GetArgument<std::string*>(i);
-				args.push_back(str != nullptr ? g_csharplm.CreateString(*str) : nullptr);
+				auto source = p->GetArgument<const char*>(i);
+				args.push_back(source != nullptr ? g_csharplm.CreateString(source) : nullptr);
+				break;
+			}
+			case ValueType::ArrayBool: {
+				auto source = p->GetArgument<bool*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<bool>(std::span(source, size), mono_get_char_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayChar8: {
+				auto source = p->GetArgument<char*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<char>(std::span(source, size), mono_get_char_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayChar16: {
+				auto source = p->GetArgument<int16_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<int16_t>(std::span(source, size), mono_get_int16_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayInt8: {
+				auto source = p->GetArgument<int8_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<int8_t>(std::span(source, size), mono_get_sbyte_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayInt16: {
+				auto source = p->GetArgument<int16_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<int16_t>(std::span(source, size), mono_get_int16_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayInt32: {
+				auto source = p->GetArgument<int32_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<int32_t>(std::span(source, size), mono_get_int32_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayInt64: {
+				auto source = p->GetArgument<int64_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<int64_t>(std::span(source, size), mono_get_int64_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayUint8: {
+				auto source = p->GetArgument<uint8_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint8_t>(std::span(source, size), mono_get_byte_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayUint16: {
+				auto source = p->GetArgument<uint16_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint16_t>(std::span(source, size), mono_get_uint16_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayUint32: {
+				auto source = p->GetArgument<uint32_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint32_t>(std::span(source, size), mono_get_uint32_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayUint64: {
+				auto source = p->GetArgument<uint64_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint64_t>(std::span(source, size), mono_get_uint64_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayPtr64: {
+				auto source = p->GetArgument<uintptr_t*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<uintptr_t>(std::span(source, size), mono_get_uintptr_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayFloat: {
+				auto source = p->GetArgument<float*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<float>(std::span(source, size), mono_get_single_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayDouble: {
+				auto source = p->GetArgument<double*>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? CreateArray<double>(std::span(source, size), mono_get_double_class) : nullptr);
+				break;
+			}
+			case ValueType::ArrayString: {
+				auto source = p->GetArgument<const char**>(i);
+				auto size = p->GetArgument<int>(++i);
+				args.push_back(source != nullptr || size <= 0 ? g_csharplm.CreateStringArray(std::span(source, size)) : nullptr);
 				break;
 			}
 		}
@@ -417,8 +532,9 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 			ret->SetReturnPtr<double>(val);
 			break;
 		}
-		case ValueType::String: {
-			// TODO: How return string ?
+		default: {
+			// TODO: How return string and arrays ?
+
 			break;
 		}
 	}
@@ -487,9 +603,9 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 			methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
 			continue;
 		}
-		
+
 		if (method.retType.type == ValueType::Function && returnType == ValueType::Ptr64) {
-			returnType = ValueType::Function;
+			returnType = ValueType::Function; // special case
 		}
 
 		if (returnType != method.retType.type) {
@@ -636,16 +752,16 @@ MonoMethod* ScriptEngine::FindCoreMethod(const std::string& name) const {
 	return it != _coreMethods.end() ? std::get<MonoMethod*>(*it) : nullptr;
 }
 
-MonoString* ScriptEngine::CreateString(std::string_view string) const {
-	return mono_string_new(_appDomain, string.data());
+MonoString* ScriptEngine::CreateString(const char* source) const {
+	return mono_string_new(_appDomain, source);
 }
 
 MonoArray* ScriptEngine::CreateArray(MonoClass* klass, size_t count) const {
 	return mono_array_new(_appDomain, klass, count);
 }
 
-MonoArray* ScriptEngine::CreateStringArray(MonoClass *klass, std::span<std::string_view> source) const {
-	MonoArray* array = CreateArray(klass, source.size());
+MonoArray* ScriptEngine::CreateStringArray(std::span<const char*> source) const {
+	MonoArray* array = CreateArray(mono_get_string_class(), source.size());
 	for (size_t i = 0; i < source.size(); ++i) {
 		mono_array_set(array, MonoString*, i, CreateString(source[i]));
 	}
@@ -729,20 +845,20 @@ ScriptInstance::ScriptInstance(const ScriptEngine& engine, const IPlugin& plugin
 		MonoMethod* constructor = engine.FindCoreMethod(".ctor");
 		const auto& desc = plugin.GetDescriptor();
 		auto id = plugin.GetId();
-		std::vector<std::string_view> deps;
+		std::vector<const char*> deps;
 		deps.reserve(desc.dependencies.size());
 		for (const auto& dependency : desc.dependencies) {
-			deps.emplace_back(dependency.name);
+			deps.emplace_back(dependency.name.c_str());
 		}
 		std::array<void*, 8> args {
 			&id,
-			engine.CreateString(plugin.GetName()),
-			engine.CreateString(plugin.GetFriendlyName()),
-			engine.CreateString(desc.friendlyName),
-			engine.CreateString(desc.versionName),
-			engine.CreateString(desc.createdBy),
-			engine.CreateString(desc.createdByURL),
-			engine.CreateStringArray(mono_get_string_class(), deps),
+			engine.CreateString(plugin.GetName().c_str()),
+			engine.CreateString(plugin.GetFriendlyName().c_str()),
+			engine.CreateString(desc.friendlyName.c_str()),
+			engine.CreateString(desc.versionName.c_str()),
+			engine.CreateString(desc.createdBy.c_str()),
+			engine.CreateString(desc.createdByURL.c_str()),
+			engine.CreateStringArray(deps),
 		};
 		mono_runtime_invoke(constructor, _instance, args.data(), nullptr);
 	}

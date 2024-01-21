@@ -49,9 +49,9 @@ namespace csharplm {
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
 
-		MonoString* CreateString(std::string_view string) const;
+		MonoString* CreateString(const char* source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
-		MonoArray* CreateStringArray(MonoClass* klass, std::span<std::string_view> source) const;
+		MonoArray* CreateStringArray(std::span<const char*> source) const;
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
