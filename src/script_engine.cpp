@@ -307,7 +307,7 @@ void ScriptEngine::ShutdownMono() {
 }
 
 template<typename T, typename C>
-MonoArray* CreateArray(std::span<T> data, C& klass) {
+MonoArray* CreateArrayT(std::span<const T> data, C& klass) {
 	MonoArray* array = g_csharplm.CreateArray(klass(), data.size());
 	for (size_t i = 0; i < data.size(); ++i) {
 		mono_array_set(array, T, i, data[i]);
@@ -360,85 +360,85 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 			case ValueType::ArrayBool: {
 				auto source = p->GetArgument<bool*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<bool>(std::span(source, size), mono_get_char_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<bool>(std::span(source, size), mono_get_char_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayChar8: {
 				auto source = p->GetArgument<char*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<char>(std::span(source, size), mono_get_char_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<char>(std::span(source, size), mono_get_char_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayChar16: {
 				auto source = p->GetArgument<int16_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<int16_t>(std::span(source, size), mono_get_int16_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<int16_t>(std::span(source, size), mono_get_int16_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt8: {
 				auto source = p->GetArgument<int8_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<int8_t>(std::span(source, size), mono_get_sbyte_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<int8_t>(std::span(source, size), mono_get_sbyte_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt16: {
 				auto source = p->GetArgument<int16_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<int16_t>(std::span(source, size), mono_get_int16_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<int16_t>(std::span(source, size), mono_get_int16_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt32: {
 				auto source = p->GetArgument<int32_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<int32_t>(std::span(source, size), mono_get_int32_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<int32_t>(std::span(source, size), mono_get_int32_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt64: {
 				auto source = p->GetArgument<int64_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<int64_t>(std::span(source, size), mono_get_int64_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<int64_t>(std::span(source, size), mono_get_int64_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint8: {
 				auto source = p->GetArgument<uint8_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint8_t>(std::span(source, size), mono_get_byte_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<uint8_t>(std::span(source, size), mono_get_byte_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint16: {
 				auto source = p->GetArgument<uint16_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint16_t>(std::span(source, size), mono_get_uint16_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<uint16_t>(std::span(source, size), mono_get_uint16_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint32: {
 				auto source = p->GetArgument<uint32_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint32_t>(std::span(source, size), mono_get_uint32_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<uint32_t>(std::span(source, size), mono_get_uint32_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint64: {
 				auto source = p->GetArgument<uint64_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<uint64_t>(std::span(source, size), mono_get_uint64_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<uint64_t>(std::span(source, size), mono_get_uint64_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayPtr64: {
 				auto source = p->GetArgument<uintptr_t*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<uintptr_t>(std::span(source, size), mono_get_uintptr_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<uintptr_t>(std::span(source, size), mono_get_uintptr_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayFloat: {
 				auto source = p->GetArgument<float*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<float>(std::span(source, size), mono_get_single_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<float>(std::span(source, size), mono_get_single_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayDouble: {
 				auto source = p->GetArgument<double*>(i);
 				auto size = p->GetArgument<int>(++i);
-				args.push_back(source != nullptr || size <= 0 ? CreateArray<double>(std::span(source, size), mono_get_double_class) : nullptr);
+				args.push_back(source != nullptr || size <= 0 ? CreateArrayT<double>(std::span(source, size), mono_get_double_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayString: {
@@ -818,9 +818,9 @@ void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, co
 
 	std::string_view domain;
 	if (!logDomain || strlen(logDomain) == 0) {
-		domain = logDomain;
-	} else {
 		domain = mono_domain_get_friendly_name(g_csharplm._appDomain);
+	} else {
+		domain = logDomain;
 	}
 	g_csharplm._provider->Log(std::format("Message: {} | Domain: {}", message, domain), fatal ? Severity::Fatal : severity);
 }
