@@ -32,6 +32,15 @@ namespace csharplm {
 
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
 	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
+	using PluginRef = std::reference_wrapper<const wizard::IPlugin>;
+	using MethodRef = std::reference_wrapper<const wizard::Method>;
+	using MethodOpt = std::optional<MethodRef>;
+	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
+
+	struct MethodInfo {
+		MethodRef method;
+		void* addr{};
+	};
 
 	class ScriptEngine :  public wizard::ILanguageModule {
 	public:
@@ -86,7 +95,7 @@ namespace csharplm {
 		std::unordered_map<std::string, MonoClass*> _coreClasses;
 		std::unordered_map<std::string, MonoMethod*> _coreMethods;
 		std::unordered_map<std::string, MonoMethod*> _exportMethods;
-		std::unordered_set<std::string> _importMethods;
+		std::unordered_map<std::string, MethodInfo> _importMethods;
 		std::vector<wizard::Function> _functions;
 
 		ScriptMap _scripts;

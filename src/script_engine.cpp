@@ -35,7 +35,7 @@ namespace csharplm::utils {
 	}
 
 	template<typename T>
-	inline bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
+	bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
 		std::ifstream istream(file, std::ios::binary);
 		if (!istream.is_open())
 			return false;
@@ -202,6 +202,10 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, con
 	MonoClass* pluginClass = CacheCoreClass("Plugin");
 	if (!pluginClass)
 		return ErrorData{ std::format("Failed to find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string()) };
+
+	MonoClass* subscribeAttribute = CacheCoreClass("SubscribeAttribute");
+	if (!subscribeAttribute)
+		return ErrorData{ std::format("Failed to find 'SubscribeAttribute' core class! Check '{}' assembly!", coreAssemblyPath.string()) };
 
 	MonoMethod* pluginCtor = CacheCoreMethod(pluginClass, ".ctor", 8);
 	if (!pluginCtor)
@@ -550,15 +554,78 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 	if (!image)
 		return ErrorData{ std::format("Failed to load assembly image") };
 
-	auto script = CreateScriptInstance(plugin, image);
-	if (!script.has_value())
+	auto scriptRef = CreateScriptInstance(plugin, image);
+	if (!scriptRef.has_value())
 		return ErrorData{ std::format("Failed to find 'Plugin' class implementation") };
+	auto& script = scriptRef->get();
+
+	std::vector<std::string> methodErrors;
+
+	MonoClass* subscribeClass = FindCoreClass("SubscribeAttribute");
+
+	MonoMethod* monoMethod;
+	void* iter = nullptr;
+	while ((monoMethod = mono_class_get_methods(script._klass, &iter))) {
+		const char* className = mono_class_get_name(script._klass);
+		const char* methodName = mono_method_get_name(monoMethod);
+		MonoCustomAttrInfo* attributes = mono_custom_attrs_from_method(monoMethod);
+		if (attributes) {
+			for (int i = 0; i < attributes->num_attrs; ++i) {
+				MonoCustomAttrEntry& entry = attributes->attrs[i];
+				if (subscribeClass != mono_method_get_class(entry.ctor))
+					continue;
+
+				std::string methodToFind;
+
+				MonoObject* instance = mono_custom_attrs_get_attr(attributes, subscribeClass);
+				void* iterator = nullptr;
+				while (MonoClassField* field = mono_class_get_fields(subscribeClass, &iterator)) {
+					const char* fieldName = mono_field_get_name(field);
+					MonoObject* fieldValue = mono_field_get_value_object(_appDomain, field, instance);
+					if (!strcmp(fieldName, "_method")) {
+						methodToFind = utils::MonoStringToString((MonoString*) fieldValue);
+						break;
+					}
+				}
+
+				auto it = _importMethods.find(methodToFind);
+				if (it != _importMethods.end()) {
+					const auto& [ref, addr] = it->second;
+					Method method = ref.get();
+					method.name = methodName;
+					method.funcName = std::format("{}.{}.{}", plugin.GetName(), className, methodName);
+
+					// VALIDATE METHOD
+
+					Function function(_rt);
+					void* methodAddr = function.GetJitFunc(method, MethodCall);
+					if (!methodAddr) {
+						methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
+						continue;
+					}
+					_functions.emplace_back(std::move(function));
+
+					const auto [_, result] = _exportMethods.try_emplace(method.funcName, monoMethod);
+					if (!result) {
+						methodErrors.emplace_back(std::format("Function name duplicate: ", method.funcName));
+						continue;
+					}
+
+					using RegisterCallbackFn = void(*)(void*);
+					auto func = reinterpret_cast<RegisterCallbackFn>(addr);
+					func(methodAddr);
+				} else {
+
+				}
+				break;
+			}
+			mono_custom_attrs_free(attributes);
+		}
+	}
 
 	const auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
 	std::vector<MethodData> methods;
 	methods.reserve(exportedMethods.size());
-
-	std::vector<std::string> methodErrors;
 
 	for (const auto& method : exportedMethods) {
 		auto seperated = utils::Split(method.funcName, ".");
@@ -577,7 +644,7 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 			continue;
 		}
 
-		MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), -1);
+		/*MonoMethod* */monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), -1);
 		if (!monoMethod) {
 			methodErrors.emplace_back(std::format("Failed to find method '{}.{}::{}'", nameSpace, className, methodName));
 			continue;
@@ -614,7 +681,7 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 		}
 
 		size_t i = 0;
-		void* iter = nullptr;
+		/*void* */iter = nullptr;
 		while (MonoType* type = mono_signature_get_params(sig, &iter)) {
 			char* paramTypeName = mono_type_get_name(type);
 			ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
@@ -674,7 +741,17 @@ void ScriptEngine::OnMethodExport(const IPlugin& plugin) {
 		}
 
 		mono_add_internal_call(funcName.c_str(), addr);
-		_importMethods.emplace(std::move(funcName));
+
+		/* should be always valid */
+		MethodOpt ref;
+		for (const auto& method : plugin.GetDescriptor().exportedMethods) {
+			if (name == method.name) {
+				ref = method;
+				break;
+			}
+		}
+
+		_importMethods.emplace(std::move(funcName), MethodInfo{ref.value(), addr});
 	}
 }
 
