@@ -679,12 +679,11 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 	}
 
 	if (!methodErrors.empty()) {
-		std::ostringstream funcs;
-		funcs << methodErrors[0];
+		std::string funcs(methodErrors[0]);
 		for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
-			funcs << ", " << *it;
+			std::format_to(std::back_inserter(funcs), ", {}", *it);
 		}
-		return ErrorData{ funcs.str() };
+		return ErrorData{ std::move(funcs) };
 	}
 
 	return LoadResultData{ std::move(methods) };
@@ -864,37 +863,30 @@ void ScriptEngine::HandleException(MonoObject* exc, void* /* userData*/) {
 		return;
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
-	
-	std::ostringstream ss;
-	bool first = true;
-	
+
+	std::string result("[Exception] ");
+
 	std::string message = utils::GetStringProperty("Message", exceptionClass, exc);
 	if (!message.empty()) {
-		ss << "Message: " << message;
-		first = false;
+		std::format_to(std::back_inserter(result), " | Message: {}", message);
 	}
 	
 	std::string source = utils::GetStringProperty("Source", exceptionClass, exc);
 	if (!source.empty()) {
-		if (!first) ss << " | ";
-		ss << "Source: " << source;
-		first = false;
+		std::format_to(std::back_inserter(result), " | Source: {}", source);
 	}
 	
 	std::string stackTrace = utils::GetStringProperty("StackTrace", exceptionClass, exc);
 	if (!stackTrace.empty()) {
-		if (!first) ss << " | ";
-		ss << "StackTrace: " << stackTrace;
-		first = false;
+		std::format_to(std::back_inserter(result), " | StackTrace: {}", stackTrace);
 	}
 	
 	std::string targetSite = utils::GetStringProperty("TargetSite", exceptionClass, exc);
 	if (!targetSite.empty()) {
-		if (!first) ss << " | ";
-		ss << "TargetSite: " << targetSite;
+		std::format_to(std::back_inserter(result), " | TargetSite: {}", targetSite);
 	}
 	
-	g_csharplm._provider->Log(ss.str(), Severity::Error);
+	g_csharplm._provider->Log(result, Severity::Error);
 }
 
 void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* /* userData*/) {
@@ -927,13 +919,11 @@ void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, co
 		}
 	}
 
-	std::string_view domain;
 	if (!logDomain || strlen(logDomain) == 0) {
-		domain = mono_domain_get_friendly_name(g_csharplm._appDomain);
+		g_csharplm._provider->Log(std::format("[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
 	} else {
-		domain = logDomain;
+		g_csharplm._provider->Log(message, fatal ? Severity::Fatal : severity);
 	}
-	g_csharplm._provider->Log(std::format("Message: {} | Domain: {}", message, domain), fatal ? Severity::Fatal : severity);
 }
 
 void ScriptEngine::OnPrintCallback(const char* message, mono_bool /*isStdout*/) {
