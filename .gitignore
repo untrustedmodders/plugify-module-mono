@@ -8,7 +8,5 @@ CMakeUserPresets.json
 
 # Build results
 /build
-/cmake-build-debug
-/cmake-build-release
 obj/
 bin/
