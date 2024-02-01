@@ -10,7 +10,7 @@ namespace csharplm {
 
 	class ScriptInstance {
 	public:
-		ScriptInstance(const ScriptEngine& engine, const wizard::IPlugin& plugin, MonoClass* klass);
+		ScriptInstance(const wizard::IPlugin& plugin, MonoClass* klass);
 		~ScriptInstance();
 
 		operator bool() const { return _instance != nullptr; }
@@ -63,6 +63,8 @@ namespace csharplm {
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
 
+		//template<typename T, typename C>
+		//MonoArray* CreateArrayT(std::span<const T> data, C& klass) const;
 		MonoString* CreateString(const char* source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
 		MonoArray* CreateStringArray(std::span<const char*> source) const;
@@ -73,13 +75,8 @@ namespace csharplm {
 		void ShutdownMono();
 
 		ScriptOpt CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
-
-		MonoClass* CacheCoreClass(std::string name);
-		MonoMethod* CacheCoreMethod(MonoClass* klass, std::string name, int params);
-
-		MonoClass* FindCoreClass(const std::string& name) const;
-		MonoMethod* FindCoreMethod(const std::string& name) const;
-
+		void* ValidateMethod(const wizard::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName);
+		
 	private:
 		static void HandleException(MonoObject* exc, void* userData);
 		static void OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* userData);
@@ -97,8 +94,6 @@ namespace csharplm {
 
 		std::shared_ptr<asmjit::JitRuntime> _rt;
 		std::shared_ptr<wizard::IWizardProvider> _provider;
-		std::unordered_map<std::string, MonoClass*> _coreClasses;
-		std::unordered_map<std::string, MonoMethod*> _coreMethods;
 		std::unordered_map<std::string, ExportMethod> _exportMethods;
 		std::unordered_map<std::string, ImportMethod> _importMethods;
 		std::vector<std::unique_ptr<wizard::Method>> _methods;
@@ -107,7 +102,8 @@ namespace csharplm {
 		ScriptMap _scripts;
 
 		struct MonoConfig {
-			bool enableDebugging{};
+			bool enableDebugging{ false };
+			bool subscribeFeature{ true };
 			std::string level;
 			std::string mask;
 			std::vector<std::string> options;
