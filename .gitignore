@@ -10,5 +10,5 @@ CMakeUserPresets.json
 /build
 /cmake-build-debug
 /cmake-build-release
-obj
-bin
+obj/
+bin/
