@@ -37,9 +37,14 @@ namespace csharplm {
 	using MethodOpt = std::optional<MethodRef>;
 	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
 
-	struct MethodInfo {
+	struct ImportMethod {
 		MethodRef method;
-		void* addr{};
+		void* addr{ nullptr };
+	};
+	
+	struct ExportMethod {
+		MonoMethod* method{ nullptr };
+		MonoObject* instance{ nullptr };
 	};
 
 	class ScriptEngine :  public wizard::ILanguageModule {
@@ -94,8 +99,9 @@ namespace csharplm {
 		std::shared_ptr<wizard::IWizardProvider> _provider;
 		std::unordered_map<std::string, MonoClass*> _coreClasses;
 		std::unordered_map<std::string, MonoMethod*> _coreMethods;
-		std::unordered_map<std::string, MonoMethod*> _exportMethods;
-		std::unordered_map<std::string, MethodInfo> _importMethods;
+		std::unordered_map<std::string, ExportMethod> _exportMethods;
+		std::unordered_map<std::string, ImportMethod> _importMethods;
+		std::vector<std::unique_ptr<wizard::Method>> _methods;
 		std::vector<wizard::Function> _functions;
 
 		ScriptMap _scripts;
