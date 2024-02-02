@@ -172,7 +172,12 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, con
 		return ErrorData{ std::format("MonoConfig: 'config.json' has JSON parsing error: {}", glz::format_error(config.error(), json)) };
 	_config = std::move(*config);
 
-	if (!InitMono(m.GetBaseDir() / "mono/lib"))
+
+	fs::path monoPath(m.GetBaseDir() / "mono/lib");
+	if (!fs::exists(monoPath))
+		return ErrorData{ std::format("Path to mono assemblies not exist '{}'", monoPath.string()) };
+
+	if (!InitMono(monoPath))
 		return ErrorData{ "Initialization of mono failed" };
 
 	ScriptGlue::RegisterFunctions();
