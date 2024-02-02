@@ -557,97 +557,6 @@ LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 
 	std::vector<std::string> methodErrors;
 
-	// SUBSCRIBE TO METHODS
-	if (_config.subscribeFeature) {
-		MonoClass* subscribeClass = mono_class_from_name(_coreImage, "Wand", "SubscribeAttribute");
-
-		const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
-		int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
-
-		for (int i = 0; i < numTypes; ++i) {
-			uint32_t cols[MONO_TYPEDEF_SIZE];
-			mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
-
-			const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
-			const char* className = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
-
-			MonoClass* monoClass = mono_class_from_name(image, nameSpace, className);
-			MonoObject* monoInstance = monoClass == script._klass ? script._instance : nullptr;
-
-			MonoMethod* monoMethod;
-			void* iter = nullptr;
-			while ((monoMethod = mono_class_get_methods(monoClass, &iter)) != nullptr) {
-				const char* methodName = mono_method_get_name(monoMethod);
-				MonoCustomAttrInfo* attributes = mono_custom_attrs_from_method(monoMethod);
-				if (attributes) {
-					for (int j = 0; j < attributes->num_attrs; ++j) {
-						MonoCustomAttrEntry& entry = attributes->attrs[j];
-						if (subscribeClass != mono_method_get_class(entry.ctor))
-							continue;
-
-						std::string methodToFind;
-
-						MonoObject* instance = mono_custom_attrs_get_attr(attributes, subscribeClass);
-						void* iterator = nullptr;
-						while (MonoClassField* field = mono_class_get_fields(subscribeClass, &iterator)) {
-							const char* fieldName = mono_field_get_name(field);
-							MonoObject* fieldValue = mono_field_get_value_object(_appDomain, field, instance);
-							if (!strcmp(fieldName, "_method")) {
-								methodToFind = utils::MonoStringToString((MonoString*) fieldValue);
-								break;
-							}
-						}
-
-						auto it = _importMethods.find(methodToFind);
-						if (it != _importMethods.end()) {
-							const auto& [ref, addr] = it->second;
-							auto& method = ref.get();
-							if (method.paramTypes.size() != 1) {
-								methodErrors.emplace_back(std::format("Destination method '{}' should have only 1 argument to subscribe", methodToFind));
-								continue;
-							}
-
-							const auto& [type, prototype] = *method.paramTypes.begin();
-							if (type != ValueType::Function) {
-								methodErrors.emplace_back(std::format("Parameter at index '1' of destination method '{}' should be 'function' type. Current type '{}' not supported", methodToFind, ValueTypeToString(type)));
-								continue;
-							}
-
-							if (!prototype) {
-								methodErrors.emplace_back(std::format("Could not subscribe to destination method '{}' which does not have prototype information", methodToFind));
-								continue;
-							}
-
-							// Generate a new method with same prototype
-							auto newMethod = std::make_unique<Method>(
-								methodName,
-								std::format("{}.{}.{}.{}", plugin.GetName(), nameSpace, className, methodName),
-								prototype->callConv,
-								prototype->paramTypes,
-								prototype->retType,
-								prototype->varIndex
-							);
-
-							void* methodAddr = ValidateMethod(*newMethod, methodErrors, monoInstance, monoMethod, nameSpace, className, methodName);
-							if (methodAddr) {
-								using RegisterCallbackFn = void(*)(void*);
-								auto func = reinterpret_cast<RegisterCallbackFn>(addr);
-								func(methodAddr);
-								_methods.emplace_back(std::move(newMethod));
-							}
-						} else {
-							methodErrors.emplace_back(std::format("Failed to find destination method '{}' to subscribe", methodToFind));
-						}
-						break;
-					}
-					mono_custom_attrs_free(attributes);
-				}
-			}
-		}
-	}
-	
-	// EXPORT METHODS
-
 	const auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
 	std::vector<MethodData> methods;
 	methods.reserve(exportedMethods.size());
@@ -719,16 +628,118 @@ void ScriptEngine::OnMethodExport(const IPlugin& plugin) {
 }
 
 void ScriptEngine::OnPluginStart(const IPlugin& plugin) {
-	ScriptOpt script = FindScript(plugin.GetName());
-	if (script.has_value()) {
-		script->get().InvokeOnStart();
+	ScriptOpt scriptRef = FindScript(plugin.GetName());
+	if (scriptRef.has_value()) {
+		auto& script = scriptRef->get();
+
+		if (_config.subscribeFeature) {
+			std::vector<std::string> methodErrors;
+
+			MonoClass* subscribeClass = mono_class_from_name(_coreImage, "Wand", "SubscribeAttribute");
+
+			const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(script._image, MONO_TABLE_TYPEDEF);
+			int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
+
+			for (int i = 0; i < numTypes; ++i) {
+				uint32_t cols[MONO_TYPEDEF_SIZE];
+				mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
+
+				const char* nameSpace = mono_metadata_string_heap(script._image, cols[MONO_TYPEDEF_NAMESPACE]);
+				const char* className = mono_metadata_string_heap(script._image, cols[MONO_TYPEDEF_NAME]);
+
+				MonoClass* monoClass = mono_class_from_name(script._image, nameSpace, className);
+				MonoObject* monoInstance = monoClass == script._klass ? script._instance : nullptr;
+
+				MonoMethod* monoMethod;
+				void* iter = nullptr;
+				while ((monoMethod = mono_class_get_methods(monoClass, &iter)) != nullptr) {
+					const char* methodName = mono_method_get_name(monoMethod);
+					MonoCustomAttrInfo* attributes = mono_custom_attrs_from_method(monoMethod);
+					if (attributes) {
+						for (int j = 0; j < attributes->num_attrs; ++j) {
+							MonoCustomAttrEntry& entry = attributes->attrs[j];
+							if (subscribeClass != mono_method_get_class(entry.ctor))
+								continue;
+
+							std::string methodToFind;
+
+							MonoObject* instance = mono_custom_attrs_get_attr(attributes, subscribeClass);
+							void* iterator = nullptr;
+							while (MonoClassField* field = mono_class_get_fields(subscribeClass, &iterator)) {
+								const char* fieldName = mono_field_get_name(field);
+								MonoObject* fieldValue = mono_field_get_value_object(_appDomain, field, instance);
+								if (!strcmp(fieldName, "_method")) {
+									methodToFind = utils::MonoStringToString((MonoString*) fieldValue);
+									break;
+								}
+							}
+
+							auto it = _importMethods.find(methodToFind);
+							if (it != _importMethods.end()) {
+								const auto& [ref, addr] = it->second;
+								auto& method = ref.get();
+								if (method.paramTypes.size() != 1) {
+									methodErrors.emplace_back(std::format("Destination method '{}' should have only 1 argument to subscribe", methodToFind));
+									continue;
+								}
+
+								const auto& [type, prototype] = *method.paramTypes.begin();
+								if (type != ValueType::Function) {
+									methodErrors.emplace_back(std::format("Parameter at index '1' of destination method '{}' should be 'function' type. Current type '{}' not supported", methodToFind, ValueTypeToString(type)));
+									continue;
+								}
+
+								if (!prototype) {
+									methodErrors.emplace_back(std::format("Could not subscribe to destination method '{}' which does not have prototype information", methodToFind));
+									continue;
+								}
+
+								// Generate a new method with same prototype
+								auto newMethod = std::make_unique<Method>(
+									methodName,
+									std::format("{}.{}.{}.{}", plugin.GetName(), nameSpace, className, methodName),
+									prototype->callConv,
+									prototype->paramTypes,
+									prototype->retType,
+									prototype->varIndex
+								);
+
+								void* methodAddr = ValidateMethod(*newMethod, methodErrors, monoInstance, monoMethod, nameSpace, className, methodName);
+								if (methodAddr) {
+									using RegisterCallbackFn = void(*)(void*);
+									auto func = reinterpret_cast<RegisterCallbackFn>(addr);
+									func(methodAddr);
+									_methods.emplace_back(std::move(newMethod));
+								}
+							} else {
+								methodErrors.emplace_back(std::format("Failed to find destination method '{}' to subscribe", methodToFind));
+							}
+							break;
+						}
+						mono_custom_attrs_free(attributes);
+					}
+				}
+			}
+
+			if (!methodErrors.empty()) {
+				std::string funcs(methodErrors[0]);
+				for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
+					std::format_to(std::back_inserter(funcs), ", {}", *it);
+				}
+				_provider->Log(std::format("Plugin '{}' has problems related to subscribe method(s): {}", plugin.GetName(), funcs), Severity::Warning);
+			}
+		}
+
+		script.InvokeOnStart();
 	}
 }
 
 void ScriptEngine::OnPluginEnd(const IPlugin& plugin) {
-	ScriptOpt script = FindScript(plugin.GetName());
-	if (script.has_value()) {
-		script->get().InvokeOnEnd();
+	ScriptOpt scriptRef = FindScript(plugin.GetName());
+	if (scriptRef.has_value()) {
+		auto& script = scriptRef->get();
+
+		script.InvokeOnEnd();
 	}
 }
 
@@ -753,7 +764,7 @@ ScriptOpt ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* i
 		if (!isPlugin)
 			continue;
 
-		const auto [it, result] = _scripts.try_emplace(plugin.GetName(), ScriptInstance(plugin, monoClass));
+		const auto [it, result] = _scripts.try_emplace(plugin.GetName(), ScriptInstance(plugin, image, monoClass));
 		if (result)
 			return std::get<ScriptInstance>(*it);
 	}
@@ -943,7 +954,7 @@ void ScriptEngine::OnPrintErrorCallback(const char* message, mono_bool /*isStdou
 
 /*_________________________________________________*/
 
-ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoClass* klass) : _klass{klass} {
+ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClass* klass) : _image{image}, _klass{klass} {
 	_instance = g_csharplm.InstantiateClass(_klass);
 
 	// Call Script (base) constructor

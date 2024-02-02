@@ -10,7 +10,7 @@ namespace csharplm {
 
 	class ScriptInstance {
 	public:
-		ScriptInstance(const wizard::IPlugin& plugin, MonoClass* klass);
+		ScriptInstance(const wizard::IPlugin& plugin, MonoImage* image, MonoClass* klass);
 		~ScriptInstance();
 
 		operator bool() const { return _instance != nullptr; }
@@ -22,6 +22,7 @@ namespace csharplm {
 		void InvokeOnEnd() const;
 
 	private:
+		MonoImage* _image{ nullptr };
 		MonoClass* _klass{ nullptr };
 		MonoObject* _instance{ nullptr };
 		MonoMethod* _onStartMethod{ nullptr };
