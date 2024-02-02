@@ -920,9 +920,9 @@ void ScriptEngine::OnLogCallback(const char* logDomain, const char* logLevel, co
 	}
 
 	if (!logDomain || strlen(logDomain) == 0) {
-		g_csharplm._provider->Log(std::format("[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
-	} else {
 		g_csharplm._provider->Log(message, fatal ? Severity::Fatal : severity);
+	} else {
+		g_csharplm._provider->Log(std::format("[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
 	}
 }
 
