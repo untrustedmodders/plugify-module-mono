@@ -65,10 +65,10 @@ namespace csharplm {
 		ScriptOpt FindScript(const std::string& name);
 
 		//template<typename T, typename C>
-		//MonoArray* CreateArrayT(std::span<const T> data, C& klass) const;
+		//MonoArray* CreateArrayT(T* data, size_t size, C& klass) const;
 		MonoString* CreateString(const char* source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
-		MonoArray* CreateStringArray(std::span<const char*> source) const;
+		MonoArray* CreateStringArray(const char** source, size_t size) const;
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
