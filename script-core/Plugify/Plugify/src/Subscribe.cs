@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Wand
+namespace Plugify
 {
     [AttributeUsage(AttributeTargets.Method)]
     public class SubscribeAttribute : Attribute

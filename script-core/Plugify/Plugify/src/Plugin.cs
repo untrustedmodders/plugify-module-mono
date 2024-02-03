@@ -2,7 +2,7 @@
 
 #nullable enable
 
-namespace Wand
+namespace Plugify
 {
     public class Plugin : IEquatable<Plugin>, IComparable<Plugin>
     {

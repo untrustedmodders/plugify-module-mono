@@ -7,8 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Reference Include="Wand">
-        <HintPath>..\..\..\build\bin\Wand.dll</HintPath>
+      <Reference Include="Plugify">
+        <HintPath>..\..\..\build\bin\Plugify.dll</HintPath>
       </Reference>
     </ItemGroup>
 

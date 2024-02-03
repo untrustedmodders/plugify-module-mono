@@ -14,16 +14,16 @@
 #include <mono/metadata/exception.h>
 #include <asmjit/asmjit.h>
 
-#include <wizard/module.h>
-#include <wizard/plugin.h>
-#include <wizard/log.h>
-#include <wizard/plugin_descriptor.h>
-#include <wizard/wizard_provider.h>
+#include <plugify/module.h>
+#include <plugify/plugin.h>
+#include <plugify/log.h>
+#include <plugify/plugin_descriptor.h>
+#include <plugify/plugify_provider.h>
 
 #include <glaze/glaze.hpp>
 
 using namespace csharplm;
-using namespace wizard;
+using namespace plugify;
 
 namespace csharplm::utils {
 	std::string ReadText(const fs::path& filepath) {
@@ -211,7 +211,7 @@ namespace csharplm::utils {
 	}
 }
 
-InitResult ScriptEngine::Initialize(std::weak_ptr<IWizardProvider> provider, const IModule& m) {
+InitResult ScriptEngine::Initialize(std::weak_ptr<IPlugifyProvider> provider, const IModule& m) {
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
@@ -1044,7 +1044,7 @@ ScriptOpt ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* i
 	return std::nullopt;
 }
 
-void* ScriptEngine::ValidateMethod(const wizard::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName) {
+void* ScriptEngine::ValidateMethod(const plugify::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName) {
 	uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
 	if (!(methodFlags & MONO_METHOD_ATTR_STATIC) && !monoInstance) {
 		methodErrors.emplace_back(std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName));

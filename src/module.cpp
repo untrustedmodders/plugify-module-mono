@@ -4,6 +4,6 @@ namespace csharplm {
 	CSharpLanguageModule g_csharplm;
 }
 
-wizard::ILanguageModule* GetLanguageModule() {
+plugify::ILanguageModule* GetLanguageModule() {
 	return &csharplm::g_csharplm;
 }

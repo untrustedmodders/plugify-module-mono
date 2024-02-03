@@ -1,7 +1,7 @@
 #pragma once
 
-#include <wizard/language_module.h>
-#include <wizard/function.h>
+#include <plugify/language_module.h>
+#include <plugify/function.h>
 
 #include "fwd.h"
 
@@ -10,7 +10,7 @@ namespace csharplm {
 
 	class ScriptInstance {
 	public:
-		ScriptInstance(const wizard::IPlugin& plugin, MonoImage* image, MonoClass* klass);
+		ScriptInstance(const plugify::IPlugin& plugin, MonoImage* image, MonoClass* klass);
 		~ScriptInstance();
 
 		operator bool() const { return _instance != nullptr; }
@@ -33,8 +33,8 @@ namespace csharplm {
 
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
 	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
-	using PluginRef = std::reference_wrapper<const wizard::IPlugin>;
-	using MethodRef = std::reference_wrapper<const wizard::Method>;
+	using PluginRef = std::reference_wrapper<const plugify::IPlugin>;
+	using MethodRef = std::reference_wrapper<const plugify::Method>;
 	using MethodOpt = std::optional<MethodRef>;
 	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
 
@@ -48,18 +48,18 @@ namespace csharplm {
 		MonoObject* instance{ nullptr };
 	};
 
-	class ScriptEngine :  public wizard::ILanguageModule {
+	class ScriptEngine :  public plugify::ILanguageModule {
 	public:
 		ScriptEngine() = default;
 		~ScriptEngine() = default;
 
 		// ILanguageModule
-		wizard::InitResult Initialize(std::weak_ptr<wizard::IWizardProvider> provider, const wizard::IModule& module) override;
+		plugify::InitResult Initialize(std::weak_ptr<plugify::IPlugifyProvider> provider, const plugify::IModule& module) override;
 		void Shutdown() override;
-		wizard::LoadResult OnPluginLoad(const wizard::IPlugin& plugin) override;
-		void OnPluginStart(const wizard::IPlugin& plugin) override;
-		void OnPluginEnd(const wizard::IPlugin& plugin) override;
-		void OnMethodExport(const wizard::IPlugin& plugin) override;
+		plugify::LoadResult OnPluginLoad(const plugify::IPlugin& plugin) override;
+		void OnPluginStart(const plugify::IPlugin& plugin) override;
+		void OnPluginEnd(const plugify::IPlugin& plugin) override;
+		void OnMethodExport(const plugify::IPlugin& plugin) override;
 
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
@@ -75,8 +75,8 @@ namespace csharplm {
 		bool InitMono(const fs::path& monoPath);
 		void ShutdownMono();
 
-		ScriptOpt CreateScriptInstance(const wizard::IPlugin& plugin, MonoImage* image);
-		void* ValidateMethod(const wizard::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName);
+		ScriptOpt CreateScriptInstance(const plugify::IPlugin& plugin, MonoImage* image);
+		void* ValidateMethod(const plugify::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName);
 		
 	private:
 		static void HandleException(MonoObject* exc, void* userData);
@@ -84,7 +84,7 @@ namespace csharplm {
 		static void OnPrintCallback(const char* message, mono_bool isStdout);
 		static void OnPrintErrorCallback(const char* message, mono_bool isStdout);
 
-		static void MethodCall(const wizard::Method* method, const wizard::Parameters* params, const uint8_t count, const wizard::ReturnValue* retVal);
+		static void MethodCall(const plugify::Method* method, const plugify::Parameters* params, const uint8_t count, const plugify::ReturnValue* retVal);
 
 	private:
 		MonoDomain* _rootDomain{ nullptr };
@@ -94,11 +94,11 @@ namespace csharplm {
 		MonoImage* _coreImage{ nullptr };
 
 		std::shared_ptr<asmjit::JitRuntime> _rt;
-		std::shared_ptr<wizard::IWizardProvider> _provider;
+		std::shared_ptr<plugify::IPlugifyProvider> _provider;
 		std::unordered_map<std::string, ExportMethod> _exportMethods;
 		std::unordered_map<std::string, ImportMethod> _importMethods;
-		std::vector<std::unique_ptr<wizard::Method>> _methods;
-		std::vector<wizard::Function> _functions;
+		std::vector<std::unique_ptr<plugify::Method>> _methods;
+		std::vector<plugify::Function> _functions;
 
 		ScriptMap _scripts;
 

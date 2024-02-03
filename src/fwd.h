@@ -13,7 +13,7 @@ extern "C" {
 	typedef int32_t mono_bool;
 }
 
-namespace wizard {
+namespace plugify {
 	class IModule;
 	class IPlugin;
 	struct Method;

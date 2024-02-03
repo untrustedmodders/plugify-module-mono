@@ -14,4 +14,4 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-#include <wizard/compat_format.h>
+#include <plugify/compat_format.h>

@@ -1,5 +1,5 @@
 ﻿using System;
-using Wand;
+using Plugify;
 
 namespace Plugin4
 {

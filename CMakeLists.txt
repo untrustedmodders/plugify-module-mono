@@ -14,12 +14,12 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-add_subdirectory(external/wizard)
+add_subdirectory(external/plugify)
 
 #
 # Options
 #
-option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" OFF)
+option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
 
 #
 # Mono
@@ -38,7 +38,7 @@ if(WIN32)
 endif()
 
 #
-# C# Language Module for Wizard
+# C# Language Module for Plugify
 #
 file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
 set(CSHARPLM_PCH_FILE "src/pch.h")
@@ -46,7 +46,7 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
 include_directories(external/mono/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} wizard glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:wizard-function>)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} plugify glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:plugify-function>)
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
 
 if(MSVC)
@@ -60,7 +60,7 @@ generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
 
 #
-# Wand Core for C# plugins (Building with csc command directly might not work everywhere)
+# Plugify Core for C# plugins (Building with csc command directly might not work everywhere)
 #
 find_program(PYTHON_EXECUTABLE NAMES "python")
 if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
@@ -74,10 +74,10 @@ if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
     set(BUILD_FOLDER ${CMAKE_BINARY_DIR}/bin)
     file(MAKE_DIRECTORY ${BUILD_FOLDER}/)
 
-    # Compile Wand
-    file(GLOB_RECURSE WAND_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Wand/Wand/src/*.cs")
-    string(REPLACE ";" " " WAND_LIST "${WAND_SOURCES}")
-    csc_compilation(Wand "${BUILD_FOLDER}/Wand.dll" ${WAND_LIST} "-target:library")
+    # Compile Plugify
+    file(GLOB_RECURSE PLUGIFY_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Plugify/Plugify/src/*.cs")
+    string(REPLACE ";" " " PLUGIFY_LIST "${PLUGIFY_SOURCES}")
+    csc_compilation(Plugify "${BUILD_FOLDER}/Plugify.dll" ${PLUGIFY_LIST} "-target:library")
 
     # Compile Sample Plugins
     file(GLOB_RECURSE PLUGIN_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Plugins/Plugins/src/*.cs")
@@ -88,7 +88,7 @@ if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
         file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME})
         file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME}/bin)
 
-        csc_compilation(${PLUGIN_NAME} "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_PATH}" ${PLUGIN_SOURCE} " -target:library -reference:${BUILD_FOLDER}/Wand.dll")
+        csc_compilation(${PLUGIN_NAME} "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_PATH}" ${PLUGIN_SOURCE} " -target:library -reference:${BUILD_FOLDER}/Plugify.dll")
         configure_file("plugin.wplugin.in" "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_NAME}.wplugin")
     endforeach()
 endif()

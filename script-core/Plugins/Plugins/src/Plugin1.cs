@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
-using Wand;
+using Plugify;
 
 namespace example_plugin
 {

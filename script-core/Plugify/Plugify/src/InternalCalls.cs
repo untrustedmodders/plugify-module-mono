@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 #nullable enable
 
-namespace Wand
+namespace Plugify
 {
 	public static class InternalCalls
 	{

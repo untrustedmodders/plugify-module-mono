@@ -10,4 +10,4 @@ namespace csharplm {
 	extern CSharpLanguageModule g_csharplm;
 }
 
-extern "C" CSHARPLM_EXPORT wizard::ILanguageModule* GetLanguageModule();
+extern "C" CSHARPLM_EXPORT plugify::ILanguageModule* GetLanguageModule();
