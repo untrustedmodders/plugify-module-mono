@@ -211,18 +211,18 @@ namespace csharplm::utils {
 	}
 }
 
-InitResult ScriptEngine::Initialize(std::weak_ptr<IPlugifyProvider> provider, const IModule& m) {
+InitResult ScriptEngine::Initialize(std::weak_ptr<IPlugifyProvider> provider, const IModule& module) {
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	auto json = utils::ReadText(m.GetBaseDir() / "config.json");
+	auto json = utils::ReadText(module.GetBaseDir() / "config.json");
 	auto config = glz::read_json<MonoConfig>(json);
 	if (!config.has_value())
 		return ErrorData{ std::format("MonoConfig: 'config.json' has JSON parsing error: {}", glz::format_error(config.error(), json)) };
 	_config = std::move(*config);
 
 
-	fs::path monoPath(m.GetBaseDir() / "mono/lib");
+	fs::path monoPath(module.GetBaseDir() / "mono/lib");
 	if (!fs::exists(monoPath))
 		return ErrorData{ std::format("Path to mono assemblies not exist '{}'", monoPath.string()) };
 
@@ -234,11 +234,11 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IPlugifyProvider> provider, co
 	_rt = std::make_shared<asmjit::JitRuntime>();
 
 	// Create an app domain
-	char appName[] = "WandMonoRuntime";
+	char appName[] = "PlugifyMonoRuntime";
 	_appDomain = mono_domain_create_appdomain(appName, nullptr);
 	mono_domain_set(_appDomain, true);
 
-	fs::path coreAssemblyPath{ m.GetBinariesDir() / "Wand.dll" };
+	fs::path coreAssemblyPath{ module.GetBaseDir() / "bin/Plugify.dll" };
 
 	// Load a core assembly
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
@@ -253,11 +253,11 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IPlugifyProvider> provider, co
 	// Retrieve and cache core classes/methods
 
 	/// Plugin
-	MonoClass* pluginClass = mono_class_from_name(_coreImage, "Wand", "Plugin");
+	MonoClass* pluginClass = mono_class_from_name(_coreImage, "Plugify", "Plugin");
 	if (!pluginClass)
 		return ErrorData{ std::format("Failed to find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string()) };
 
-	MonoClass* subscribeAttribute = mono_class_from_name(_coreImage, "Wand", "SubscribeAttribute");
+	MonoClass* subscribeAttribute = mono_class_from_name(_coreImage, "Plugify", "SubscribeAttribute");
 	if (!subscribeAttribute)
 		return ErrorData{ std::format("Failed to find 'SubscribeAttribute' core class! Check '{}' assembly!", coreAssemblyPath.string()) };
 
@@ -318,7 +318,7 @@ bool ScriptEngine::InitMono(const fs::path& monoPath) {
 	if (_config.enableDebugging)
 		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
 
-	_rootDomain = mono_jit_init("WandJITRuntime");
+	_rootDomain = mono_jit_init("PlugifyJITRuntime");
 	if (!_rootDomain)
 		return false;
 
@@ -814,7 +814,7 @@ void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const u
 
 LoadResult ScriptEngine::OnPluginLoad(const IPlugin& plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetFilePath(), _config.enableDebugging, status);
+	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint, _config.enableDebugging, status);
 	if (!assembly)
 		return ErrorData{ std::format("Failed to load assembly: '{}'",mono_image_strerror(status)) };
 
@@ -907,7 +907,7 @@ void ScriptEngine::OnPluginStart(const IPlugin& plugin) {
 		if (_config.subscribeFeature) {
 			std::vector<std::string> methodErrors;
 
-			MonoClass* subscribeClass = mono_class_from_name(_coreImage, "Wand", "SubscribeAttribute");
+			MonoClass* subscribeClass = mono_class_from_name(_coreImage, "Plugify", "SubscribeAttribute");
 
 			const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(script._image, MONO_TABLE_TYPEDEF);
 			int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
@@ -1016,7 +1016,7 @@ void ScriptEngine::OnPluginEnd(const IPlugin& plugin) {
 }
 
 ScriptOpt ScriptEngine::CreateScriptInstance(const IPlugin& plugin, MonoImage* image) {
-	MonoClass* pluginClass = mono_class_from_name(_coreImage, "Wand", "Plugin");
+	MonoClass* pluginClass = mono_class_from_name(_coreImage, "Plugify", "Plugin");
 
 	const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
 	int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
@@ -1232,7 +1232,7 @@ ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClas
 
 	// Call Script (base) constructor
 	{
-		MonoClass* pluginClass = mono_class_from_name(g_csharplm._coreImage, "Wand", "Plugin");
+		MonoClass* pluginClass = mono_class_from_name(g_csharplm._coreImage, "Plugify", "Plugin");
 		MonoMethod* constructor = mono_class_get_method_from_name(pluginClass, ".ctor", 8);
 		
 		const auto& desc = plugin.GetDescriptor();

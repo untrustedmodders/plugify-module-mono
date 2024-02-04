@@ -14,6 +14,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+#
+# Plugify
+#
 add_subdirectory(external/plugify)
 
 #
@@ -89,6 +92,6 @@ if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
         file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME}/bin)
 
         csc_compilation(${PLUGIN_NAME} "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_PATH}" ${PLUGIN_SOURCE} " -target:library -reference:${BUILD_FOLDER}/Plugify.dll")
-        configure_file("plugin.wplugin.in" "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_NAME}.wplugin")
+        configure_file("plugin.pplugin.in" "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_NAME}.pplugin")
     endforeach()
 endif()
