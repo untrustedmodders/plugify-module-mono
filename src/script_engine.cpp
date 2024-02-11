@@ -12,7 +12,6 @@
 #include <mono/metadata/mono-config.h>
 #include <mono/metadata/threads.h>
 #include <mono/metadata/exception.h>
-#include <asmjit/asmjit.h>
 
 #include <plugify/module.h>
 #include <plugify/plugin.h>
