@@ -17,6 +17,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 #
 # Plugify
 #
+set(PLUGIFY_BUILD_SHARED_LIB ON CACHE INTERNAL "")
+set(PLUGIFY_BUILD_FUNCTION ON CACHE INTERNAL "")
 add_subdirectory(external/plugify)
 
 #
@@ -49,7 +51,7 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
 include_directories(external/mono/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} plugify glaze::glaze asmjit::asmjit $<TARGET_OBJECTS:plugify-function>)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze)
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
 
 if(MSVC)

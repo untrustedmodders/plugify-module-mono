@@ -84,7 +84,7 @@ namespace csharplm {
 		static void OnPrintCallback(const char* message, mono_bool isStdout);
 		static void OnPrintErrorCallback(const char* message, mono_bool isStdout);
 
-		static void MethodCall(const plugify::Method* method, const plugify::Parameters* params, const uint8_t count, const plugify::ReturnValue* retVal);
+		static void InternalCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
 	private:
 		MonoDomain* _rootDomain{ nullptr };
@@ -95,8 +95,8 @@ namespace csharplm {
 
 		std::shared_ptr<asmjit::JitRuntime> _rt;
 		std::shared_ptr<plugify::IPlugifyProvider> _provider;
-		std::unordered_map<std::string, ExportMethod> _exportMethods;
 		std::unordered_map<std::string, ImportMethod> _importMethods;
+		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::vector<plugify::Function> _functions;
 

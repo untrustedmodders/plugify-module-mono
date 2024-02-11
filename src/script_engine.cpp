@@ -265,7 +265,7 @@ InitResult ScriptEngine::Initialize(std::weak_ptr<IPlugifyProvider> provider, co
 	if (!pluginCtor)
 		return ErrorData{ std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string()) };
 
-	_provider->Log("[CSHARPLM] Inited!", Severity::Debug);
+	_provider->Log("[csharplm] Inited!", Severity::Debug);
 
 	return InitResultData{};
 }
@@ -305,7 +305,7 @@ bool ScriptEngine::InitMono(const fs::path& monoPath) {
 			if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
 				options.push_back(opt.data());
 				if (opt.starts_with("--debugger"))
-					_provider->Log(std::format("Mono debugger: {}", opt), Severity::Info);
+					_provider->Log(std::format("[csharplm] Mono debugger: {}", opt), Severity::Info);
 			}
 		}
 		mono_jit_parse_options(static_cast<int>(options.size()), options.data());
@@ -331,7 +331,7 @@ bool ScriptEngine::InitMono(const fs::path& monoPath) {
 	//mono_set_crash_chaining(true);
 	
 	char* buildInfo = mono_get_runtime_build_info();
-	_provider->Log(std::format("Mono: Runtime version: {}", buildInfo), Severity::Debug);
+	_provider->Log(std::format("[csharplm] Mono: Runtime version: {}", buildInfo), Severity::Debug);
 	mono_free(buildInfo);
 
 	return true;
@@ -363,15 +363,8 @@ MonoArray* CreateArrayT(T* data, size_t size, C& klass) {
 	return array;
 }
 
-void ScriptEngine::MethodCall(const Method* method, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
-	const auto& exportMethods = g_csharplm._exportMethods;
-	auto it = exportMethods.find(method->funcName);
-	if (it == exportMethods.end()) {
-		if (g_csharplm._provider)
-			g_csharplm._provider->Log(std::format("Method '{}' not found!", method->funcName), Severity::Error);
-		return;
-	}
-	const auto& [monoMethod, monoObject] = std::get<ExportMethod>(*it);
+void ScriptEngine::InternalCall(const Method* method, void* data, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
+	const auto& [monoMethod, monoObject] = *reinterpret_cast<ExportMethod*>(data);
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	std::vector<void*> args;
@@ -880,7 +873,7 @@ void ScriptEngine::OnMethodExport(const IPlugin& plugin) {
 		auto funcName = std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), name);
 
 		if (_importMethods.contains(funcName)) {
-			_provider->Log(std::format("Method name duplicate: {}", funcName), Severity::Error);
+			_provider->Log(std::format("[csharplm] Method name duplicate: {}", funcName), Severity::Error);
 			continue;
 		}
 
@@ -998,7 +991,7 @@ void ScriptEngine::OnPluginStart(const IPlugin& plugin) {
 				for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
 					std::format_to(std::back_inserter(funcs), ", {}", *it);
 				}
-				_provider->Log(std::format("Plugin '{}' has problems related to subscribe method(s): {}", plugin.GetName(), funcs), Severity::Warning);
+				_provider->Log(std::format("[csharplm] Plugin '{}' has problems related to subscribe method(s): {}", plugin.GetName(), funcs), Severity::Warning);
 			}
 		}
 
@@ -1100,14 +1093,10 @@ void* ScriptEngine::ValidateMethod(const plugify::Method& method, std::vector<st
 	if (!methodErrors.empty())
 		return nullptr;
 
-	const auto [_, result] = _exportMethods.try_emplace(method.funcName, ExportMethod{monoMethod, monoInstance});
-	if (!result) {
-		methodErrors.emplace_back(std::format("Function name duplicate: ", method.funcName));
-		return nullptr;
-	}
+	auto& exportMethod = _exportMethods.emplace_back(std::make_unique<ExportMethod>(monoMethod, monoInstance));
 
 	Function function(_rt);
-	void* methodAddr = function.GetJitFunc(method, MethodCall);
+	void* methodAddr = function.GetJitFunc(method, &InternalCall, exportMethod.get());
 	if (!methodAddr) {
 		methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
 		return nullptr;
@@ -1153,7 +1142,7 @@ void ScriptEngine::HandleException(MonoObject* exc, void* /* userData*/) {
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
 
-	std::string result("[Exception] ");
+	std::string result("[[Exception] ");
 
 	std::string message = utils::GetStringProperty("Message", exceptionClass, exc);
 	if (!message.empty()) {
