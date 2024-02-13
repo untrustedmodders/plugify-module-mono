@@ -52,10 +52,10 @@ namespace csharplm {
 		ScriptOpt FindScript(const std::string& name);
 
 		//template<typename T, typename C>
-		//MonoArray* CreateArrayT(T* data, size_t size, C& klass) const;
-		MonoString* CreateString(const char* source) const;
+		//MonoArray* CreateArrayT(const std::vector<T>& source, C& klass) const;
+		MonoString* CreateString(const std::string& source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
-		MonoArray* CreateStringArray(const char** source, size_t size) const;
+		MonoArray* CreateStringArray(const std::vector<std::string>& source) const;
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
@@ -71,6 +71,7 @@ namespace csharplm {
 		static void OnPrintCallback(const char* message, mono_bool isStdout);
 		static void OnPrintErrorCallback(const char* message, mono_bool isStdout);
 
+		static void ExternalCall(const plugify::Method* method, void* addr, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 		static void InternalCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
 	private:

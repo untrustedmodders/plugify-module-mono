@@ -21,6 +21,8 @@ set(PLUGIFY_BUILD_SHARED_LIB ON CACHE INTERNAL "")
 set(PLUGIFY_BUILD_FUNCTION ON CACHE INTERNAL "")
 add_subdirectory(external/plugify)
 
+add_subdirectory(external/dyncall)
+
 #
 # Options
 #
@@ -51,8 +53,9 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
 include_directories(external/mono/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIBS} plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze dyncall_s)
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
+include_directories(external/dyncall/)
 
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)

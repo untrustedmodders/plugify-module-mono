@@ -19,6 +19,7 @@
 #include <plugify/plugify_provider.h>
 
 #include <glaze/glaze.hpp>
+#include <dyncall/dyncall.h>
 
 using namespace csharplm;
 using namespace plugify;
@@ -85,7 +86,7 @@ namespace csharplm::utils {
 		}
 	}
 
-	void MonoStringToCStr(MonoString* string, char* dest) {
+	/*void MonoStringToCStr(MonoString* string, char* dest) {
 		char* cStr = mono_string_to_utf8(string);
 		strcpy_s(dest, strlen(dest), cStr);
 		mono_free(cStr);
@@ -95,7 +96,7 @@ namespace csharplm::utils {
 		wchar_t* cWStr = mono_string_to_utf16(string);
 		wcscpy_s(dest, wcslen(dest), cWStr);
 		mono_free(cWStr);
-	}
+	}*/
 
 	std::string MonoStringToString(MonoString* string) {
 		char* cStr = mono_string_to_utf8(string);
@@ -120,7 +121,7 @@ namespace csharplm::utils {
 		return {};
 	}
 
-	template<typename T>
+	/*template<typename T>
 	size_t MonoArrayToCArr(MonoArray* array, T* dest, size_t size) {
 		auto length = mono_array_length(array);
 		auto minLen = std::min(length, size);
@@ -148,6 +149,28 @@ namespace csharplm::utils {
 			}
 		}
 		return minLen;
+	}*/
+
+	template<typename T>
+	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
+		auto length = mono_array_length(array);
+		dest.resize(length);
+		for (size_t i = 0; i < length; ++i) {
+			MonoObject* element = mono_array_get(array, MonoObject*, i);
+			if constexpr (std::is_same_v<T, char*>) {
+				if (element != nullptr)
+					dest[i] = MonoStringToString((MonoString*)element);
+				else if (strlen(dest[i]))
+					dest[i] = {};
+			} else if constexpr (std::is_same_v<T, wchar_t*>) {
+				if (element != nullptr)
+					dest[i] = MonoStringToWString((MonoString*)element);
+				else if (wcslen(dest[i]))
+					dest[i] = {};
+			} else {
+				dest[i] = *(T*) mono_object_unbox(element);
+			}
+		}
 	}
 
 	ValueType MonoTypeToValueType(const char* typeName) {
@@ -353,14 +376,234 @@ void CSharpLanguageModule::ShutdownMono() {
 }
 
 template<typename T, typename C>
-MonoArray* CreateArrayT(T* data, size_t size, C& klass) {
-	MonoArray* array = g_csharplm.CreateArray(klass(), size);
-	for (size_t i = 0; i < size; ++i) {
-		mono_array_set(array, T, i, data[i]);
+MonoArray* CreateArrayT(const std::vector<T>& source, C& klass) {
+	MonoArray* array = g_csharplm.CreateArray(klass(), source.size());
+	for (size_t i = 0; i < source.size(); ++i) {
+		mono_array_set(array, T, i, source[i]);
 	}
 	return array;
 }
 
+// Call from C# to C++
+void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
+	DCCallVM* vm = dcNewCallVM(4096);
+	dcMode(vm, DC_CALL_C_DEFAULT);
+	dcReset(vm);
+
+	for (uint8_t i = 0; i < count; ++i) {
+		auto& param = method->paramTypes[i];
+		switch (param.type) {
+			case ValueType::Invalid:
+			case ValueType::Void:
+				break;
+
+			// No mono
+			case ValueType::Bool:
+				dcArgBool(vm, p->GetArgument<bool>(i));
+				break;
+			case ValueType::Char8:
+				dcArgChar(vm, p->GetArgument<char>(i));
+				break;
+			case ValueType::Char16:
+				dcArgShort(vm, static_cast<short>(p->GetArgument<wchar_t>(i)));
+				break;
+			case ValueType::Int8:
+			case ValueType::Uint8:
+				dcArgChar(vm, p->GetArgument<int8_t>(i));
+				break;
+			case ValueType::Int16:
+			case ValueType::Uint16:
+				dcArgShort(vm, p->GetArgument<int16_t>(i));
+				break;
+			case ValueType::Int32:
+			case ValueType::Uint32:
+				dcArgInt(vm, p->GetArgument<int32_t>(i));
+				break;
+			case ValueType::Int64:
+			case ValueType::Uint64:
+				dcArgLongLong(vm, p->GetArgument<int64_t>(i));
+			case ValueType::Function:
+			case ValueType::Ptr64:
+				dcArgPointer(vm, p->GetArgument<void*>(i));
+				break;
+			case ValueType::Float:
+				dcArgFloat(vm, p->GetArgument<float>(i));
+				break;
+			case ValueType::Double:
+				dcArgDouble(vm, p->GetArgument<double>(i));
+				break;
+
+			// MonoString*
+			case ValueType::String:
+				dcArgPointer(vm, );
+				break;
+
+			// MonoArray*
+			case ValueType::ArrayBool:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayChar8:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayChar16:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayInt8:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayInt16:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayInt32:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayInt64:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayUint8:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayUint16:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayUint32:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayUint64:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayPtr64:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayFloat:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayDouble:
+				dcArgPointer(vm, );
+				break;
+			case ValueType::ArrayString:
+				dcArgPointer(vm, );
+				break;
+		}
+	}
+
+	switch (method->retType.type) {
+		case ValueType::Invalid:
+		case ValueType::Void:
+			break;
+		case ValueType::Bool: {
+			bool val = dcCallBool(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Char8: {
+			char val = dcCallChar(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Char16: {
+			wchar_t val = static_cast<wchar_t>(dcCallShort(vm, addr));
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Int8: {
+			int8_t val = dcCallChar(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Int16: {
+			int16_t val = dcCallShort(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Int32: {
+			int32_t val = dcCallInt(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Int64: {
+			int64_t val = dcCallLongLong(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Uint8: {
+			uint8_t val = static_cast<uint8_t>(dcCallChar(vm, addr));
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Uint16: {
+			uint16_t val = static_cast<uint16_t>(dcCallShort(vm, addr));
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Uint32: {
+			uint32_t val = static_cast<uint32_t>(dcCallInt(vm, addr));
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Uint64: {
+			uint64_t val = static_cast<uint64_t>(dcCallLongLong(vm, addr));
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Function:
+		case ValueType::Ptr64: {
+			void* val = dcCallPointer(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Float: {
+			float val = dcCallFloat(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+		case ValueType::Double: {
+			double val = dcCallDouble(vm, addr);
+			ret->SetReturnPtr(val);
+			break;
+		}
+
+		// MonoString*
+		case ValueType::String:
+			break;
+
+		// MonoArray*
+		case ValueType::ArrayBool:
+			break;
+		case ValueType::ArrayChar8:
+			break;
+		case ValueType::ArrayChar16:
+			break;
+		case ValueType::ArrayInt8:
+			break;
+		case ValueType::ArrayInt16:
+			break;
+		case ValueType::ArrayInt32:
+			break;
+		case ValueType::ArrayInt64:
+			break;
+		case ValueType::ArrayUint8:
+			break;
+		case ValueType::ArrayUint16:
+			break;
+		case ValueType::ArrayUint32:
+			break;
+		case ValueType::ArrayUint64:
+			break;
+		case ValueType::ArrayPtr64:
+			break;
+		case ValueType::ArrayFloat:
+			break;
+		case ValueType::ArrayDouble:
+			break;
+		case ValueType::ArrayString:
+			break;
+	}
+
+	dcFree(vm);
+}
+
+// Call from C++ to C#
 void CSharpLanguageModule::InternalCall(const Method* method, void* data, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
 	const auto& [monoMethod, monoObject] = *reinterpret_cast<ExportMethod*>(data);
 
@@ -395,98 +638,83 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 				args.push_back(p->GetArgumentPtr(i));
 				break;
 			case ValueType::String: {
-				auto source = p->GetArgument<const char*>(i);
-				args.push_back(source != nullptr ? g_csharplm.CreateString(source) : nullptr);
+				auto source = p->GetArgument<std::string*>(i);
+				args.push_back(source != nullptr ? g_csharplm.CreateString(*source) : nullptr);
 				break;
 			}
 			case ValueType::ArrayBool: {
-				auto source = p->GetArgument<bool*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<bool>(source, size, mono_get_char_class) : nullptr);
+				auto source = p->GetArgument<std::vector<bool>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<bool>(*source, mono_get_char_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayChar8: {
-				auto source = p->GetArgument<char*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<char>(source, size, mono_get_char_class) : nullptr);
+				auto source = p->GetArgument<std::vector<char>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<char>(*source, mono_get_char_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayChar16: {
-				auto source = p->GetArgument<char16_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<char16_t>(source, size, mono_get_int16_class) : nullptr);
+				auto source = p->GetArgument<std::vector<char16_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<char16_t>(*source, mono_get_int16_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt8: {
-				auto source = p->GetArgument<int8_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<int8_t>(source, size, mono_get_sbyte_class) : nullptr);
+				auto source = p->GetArgument<std::vector<int8_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<int8_t>(*source, mono_get_sbyte_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt16: {
-				auto source = p->GetArgument<int16_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<int16_t>(source, size, mono_get_int16_class) : nullptr);
+				auto source = p->GetArgument<std::vector<int16_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<int16_t>(*source, mono_get_int16_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt32: {
-				auto source = p->GetArgument<int32_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<int32_t>(source, size, mono_get_int32_class) : nullptr);
+				auto source = p->GetArgument<std::vector<int32_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<int32_t>(*source, mono_get_int32_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayInt64: {
-				auto source = p->GetArgument<int64_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<int64_t>(source, size, mono_get_int64_class) : nullptr);
+				auto source = p->GetArgument<std::vector<int64_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<int64_t>(*source, mono_get_int64_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint8: {
-				auto source = p->GetArgument<uint8_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<uint8_t>(source, size, mono_get_byte_class) : nullptr);
+				auto source = p->GetArgument<std::vector<uint8_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<uint8_t>(*source, mono_get_byte_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint16: {
-				auto source = p->GetArgument<uint16_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<uint16_t>(source, size, mono_get_uint16_class) : nullptr);
+				auto source = p->GetArgument<std::vector<uint16_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<uint16_t>(*source, mono_get_uint16_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint32: {
-				auto source = p->GetArgument<uint32_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<uint32_t>(source, size, mono_get_uint32_class) : nullptr);
+				auto source = p->GetArgument<std::vector<uint32_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<uint32_t>(*source, mono_get_uint32_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayUint64: {
-				auto source = p->GetArgument<uint64_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<uint64_t>(source, size, mono_get_uint64_class) : nullptr);
+				auto source = p->GetArgument<std::vector<uint64_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<uint64_t>(*source, mono_get_uint64_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayPtr64: {
-				auto source = p->GetArgument<uintptr_t*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<uintptr_t>(source, size, mono_get_uintptr_class) : nullptr);
+				auto source = p->GetArgument<std::vector<uintptr_t>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<uintptr_t>(*source, mono_get_uintptr_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayFloat: {
-				auto source = p->GetArgument<float*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<float>(source, size, mono_get_single_class) : nullptr);
+				auto source = p->GetArgument<std::vector<float>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<float>(*source, mono_get_single_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayDouble: {
-				auto source = p->GetArgument<double*>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? CreateArrayT<double>(source, size, mono_get_double_class) : nullptr);
+				auto source = p->GetArgument<std::vector<double>*>(i);
+				args.push_back(source != nullptr ? CreateArrayT<double>(*source, mono_get_double_class) : nullptr);
 				break;
 			}
 			case ValueType::ArrayString: {
-				auto source = p->GetArgument<const char**>(i);
-				auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-				args.push_back(source != nullptr && size > 0 ? g_csharplm.CreateStringArray(source, size) : nullptr);
+				auto source = p->GetArgument<std::vector<std::string>*>(i);
+				args.push_back(source != nullptr ? g_csharplm.CreateStringArray(*source) : nullptr);
 				break;
 			}
 		}
@@ -496,6 +724,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 	MonoObject* result = mono_runtime_invoke(monoMethod, monoObject, args.data(), &exception);
 	if (exception) {
 		HandleException(exception, nullptr);
+		ret->SetReturnPtr<uintptr_t>({});
 		return;
 	}
 
@@ -506,214 +735,132 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 				switch (param.type) {
 					case ValueType::String: {
 						auto source = (MonoString*) args[i];
-						auto dest = p->GetArgument<char*>(i);
-						if (source != nullptr/* && dest != nullptr*/)  {
-							utils::MonoStringToCStr(source, dest);
+						if (source != nullptr)  {
+							auto dest = p->GetArgument<std::string*>(i);
+							*dest = utils::MonoStringToString(source);
 						}
 						break;
 					}
 					case ValueType::ArrayBool: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<bool*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<bool>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayChar8: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<char*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<char>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayChar16: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<char16_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<char16_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayInt8: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<int8_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<int8_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayInt16: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<int16_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<int16_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayInt32: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<int32_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<int32_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayInt64: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<int64_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<int64_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayUint8: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<uint8_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<uint8_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayUint16: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<uint16_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<uint16_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayUint32: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<uint32_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<uint32_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayUint64: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<uint64_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<uint64_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayPtr64: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<uintptr_t*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<uintptr_t>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayFloat: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<float*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<float>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayDouble: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<double*>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<double>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayString: {
 						auto source = (MonoArray*) args[i];
 						if (source != nullptr) {
-							auto dest = p->GetArgument<char**>(i);
-							auto size = static_cast<size_t>(p->GetArgument<int>(++i));
-							auto length = utils::MonoArrayToCArr(source, dest, size);
-							if (size != length) {
-								p->SetArgument<int>(i, static_cast<int>(length));
-							}
+							auto dest = p->GetArgument<std::vector<std::string>*>(i);
+							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
-					default:
-						break;
-				}
-			} else {
-				switch (param.type) {
-					case ValueType::ArrayBool:
-					case ValueType::ArrayChar8:
-					case ValueType::ArrayChar16:
-					case ValueType::ArrayInt8:
-					case ValueType::ArrayInt16:
-					case ValueType::ArrayInt32:
-					case ValueType::ArrayInt64:
-					case ValueType::ArrayUint8:
-					case ValueType::ArrayUint16:
-					case ValueType::ArrayUint32:
-					case ValueType::ArrayUint64:
-					case ValueType::ArrayPtr64:
-					case ValueType::ArrayFloat:
-					case ValueType::ArrayDouble:
-					case ValueType::ArrayString:
-						++i; // skip next param, because it array size
-						break;
 					default:
 						break;
 				}
@@ -877,12 +1024,23 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 
 		for (const auto& method : plugin.GetDescriptor().exportedMethods) {
 			if (name == method.name) {
+
+				Function function(_rt);
+				void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr);
+				if (!methodAddr) {
+					_provider->Log(std::format("[csharplm] Method JIT generation error: {}", function.GetError()), Severity::Error);
+					continue;
+				}
+				_functions.emplace_back(std::move(function));
+				
+				mono_add_internal_call(funcName.c_str(), methodAddr);
+				
 				_importMethods.emplace(std::move(funcName), ImportMethod{method, addr});
 				break;
 			}
 		}
 
-		mono_add_internal_call(funcName.c_str(), addr);
+		//mono_add_internal_call(funcName.c_str(), addr);
 	}
 }
 
@@ -1107,19 +1265,18 @@ ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 	return std::nullopt;
 }
 
-MonoString* CSharpLanguageModule::CreateString(const char* source) const {
-	return strlen(source) ? mono_string_new(_appDomain, source) : mono_string_empty(_appDomain);
+MonoString* CSharpLanguageModule::CreateString(const std::string& source) const {
+	return source.empty() ? mono_string_empty(_appDomain) : mono_string_new(_appDomain, source.c_str());
 }
 
 MonoArray* CSharpLanguageModule::CreateArray(MonoClass* klass, size_t count) const {
 	return mono_array_new(_appDomain, klass, count);
 }
 
-MonoArray* CSharpLanguageModule::CreateStringArray(const char** source, size_t size) const {
-	MonoArray* array = CreateArray(mono_get_string_class(), size);
-	for (size_t i = 0; i < size; ++i) {
-		const char* str = source[i];
-		mono_array_set(array, MonoString*, i, str != nullptr ? CreateString(str) : nullptr);
+MonoArray* CSharpLanguageModule::CreateStringArray(const std::vector<std::string>& source) const {
+	MonoArray* array = CreateArray(mono_get_string_class(), source.size());
+	for (size_t i = 0; i < source.size(); ++i) {
+		mono_array_set(array, MonoString*, i, CreateString(source[i]));
 	}
 	return array;
 }
@@ -1192,7 +1349,7 @@ void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logL
 	}
 
 	if (!logDomain || strlen(logDomain) == 0) {
-		g_csharplm._provider->Log("[csharplm] "s + message, fatal ? Severity::Fatal : severity);
+		g_csharplm._provider->Log(std::format("[csharplm] {}", message), fatal ? Severity::Fatal : severity);
 	} else {
 		g_csharplm._provider->Log(std::format("[csharplm] [{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
 	}
@@ -1200,12 +1357,12 @@ void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logL
 
 void CSharpLanguageModule::OnPrintCallback(const char* message, mono_bool /*isStdout*/) {
 	if (g_csharplm._provider)
-		g_csharplm._provider->Log("[csharplm] "s + message, Severity::Warning);
+		g_csharplm._provider->Log(std::format("[csharplm] {}", message), Severity::Warning);
 }
 
 void CSharpLanguageModule::OnPrintErrorCallback(const char* message, mono_bool /*isStdout*/) {
 	if (g_csharplm._provider)
-		g_csharplm._provider->Log("[csharplm] "s + message, Severity::Error);
+		g_csharplm._provider->Log(std::format("[csharplm] {}", message), Severity::Error);
 }
 
 /*_________________________________________________*/
@@ -1220,20 +1377,20 @@ ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClas
 		
 		const auto& desc = plugin.GetDescriptor();
 		auto id = plugin.GetId();
-		std::vector<const char*> deps;
+		std::vector<std::string> deps;
 		deps.reserve(desc.dependencies.size());
 		for (const auto& dependency : desc.dependencies) {
-			deps.emplace_back(dependency.name.c_str());
+			deps.emplace_back(dependency.name);
 		}
 		std::array<void*, 8> args {
 			&id,
-			g_csharplm.CreateString(plugin.GetName().c_str()),
-			g_csharplm.CreateString(plugin.GetFriendlyName().c_str()),
-			g_csharplm.CreateString(desc.friendlyName.c_str()),
-			g_csharplm.CreateString(desc.versionName.c_str()),
-			g_csharplm.CreateString(desc.createdBy.c_str()),
-			g_csharplm.CreateString(desc.createdByURL.c_str()),
-			g_csharplm.CreateStringArray(deps.data(), deps.size()),
+			g_csharplm.CreateString(plugin.GetName()),
+			g_csharplm.CreateString(plugin.GetFriendlyName()),
+			g_csharplm.CreateString(desc.friendlyName),
+			g_csharplm.CreateString(desc.versionName),
+			g_csharplm.CreateString(desc.createdBy),
+			g_csharplm.CreateString(desc.createdByURL),
+			g_csharplm.CreateStringArray(deps),
 		};
 		mono_runtime_invoke(constructor, _instance, args.data(), nullptr);
 	}
