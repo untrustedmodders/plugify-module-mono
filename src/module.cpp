@@ -490,8 +490,6 @@ void StoreValueParam(const Parameters* p, DCCallVM* vm, std::vector<void*>& args
 		case ValueType::Invalid:
 		case ValueType::Void:
 			break;
-
-		// No mono
 		case ValueType::Bool:
 			dcArgBool(vm, p->GetArgument<bool>(i));
 			break;
@@ -663,7 +661,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	bool hasRet = returnType >= ValueType::String && returnType <= ValueType::ArrayString;
 	bool hasRefs = false;
 
-	/* branchless */
+	/* branchless if-else */
 	using StoreParams = decltype(&StoreValueParam);
 	static StoreParams storeParam[2] = { &StoreValueParam, &StoreRefParam };
 
@@ -672,7 +670,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	// Store parameters
 
 	if (hasRet) {
-		storeParam[1](p, vm, args, j++, returnType);
+		storeParam[1](p, vm, args, j++, returnType); // ret pass by ref
 	}
 
 	for (uint8_t i = 0; i < count; ++i) {
@@ -1730,7 +1728,6 @@ void* CSharpLanguageModule::ValidateMethod(const plugify::Method& method, std::v
 	_functions.emplace_back(std::move(function));
 	return methodAddr;
 };
-
 
 ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 	auto it = _scripts.find(name);
