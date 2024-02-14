@@ -607,13 +607,13 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 void CSharpLanguageModule::InternalCall(const Method* method, void* data, const Parameters* p, const uint8_t count, const ReturnValue* ret) {
 	const auto& [monoMethod, monoObject] = *reinterpret_cast<ExportMethod*>(data);
 
-	/// We not create param vector, and use Parameters* params directly if passing primitives
-	std::vector<void*> args;
-	args.reserve(count);
 	bool hasRefs = false;
+	bool hasRet = method->retType.type >= ValueType::String;
 
-	for (uint8_t i = 0; i < count; ++i) {
-		auto& param = method->paramTypes[i];
+	std::vector<void> args(hasRet ? count - 1 : count);
+
+	for (uint8_t i = hasRet, j = 0; i < count; ++i) {
+		auto& param = method->paramTypes[j];
 		hasRefs |= param.ref;
 		switch (param.type) {
 			case ValueType::Invalid:
@@ -635,89 +635,90 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			case ValueType::Float:
 			case ValueType::Double:
 			case ValueType::Function:
-				args.push_back(p->GetArgumentPtr(i));
+				args[j] = p->GetArgumentPtr(i);
 				break;
 			case ValueType::String: {
 				auto source = p->GetArgument<std::string*>(i);
-				args.push_back(source != nullptr ? g_csharplm.CreateString(*source) : nullptr);
+				args[j] = source != nullptr ? g_csharplm.CreateString(*source) : nullptr;
 				break;
 			}
 			case ValueType::ArrayBool: {
 				auto source = p->GetArgument<std::vector<bool>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<bool>(*source, mono_get_char_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<bool>(*source, mono_get_char_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayChar8: {
 				auto source = p->GetArgument<std::vector<char>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<char>(*source, mono_get_char_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<char>(*source, mono_get_char_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayChar16: {
 				auto source = p->GetArgument<std::vector<char16_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<char16_t>(*source, mono_get_int16_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<char16_t>(*source, mono_get_int16_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayInt8: {
 				auto source = p->GetArgument<std::vector<int8_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<int8_t>(*source, mono_get_sbyte_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<int8_t>(*source, mono_get_sbyte_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayInt16: {
 				auto source = p->GetArgument<std::vector<int16_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<int16_t>(*source, mono_get_int16_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<int16_t>(*source, mono_get_int16_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayInt32: {
 				auto source = p->GetArgument<std::vector<int32_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<int32_t>(*source, mono_get_int32_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<int32_t>(*source, mono_get_int32_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayInt64: {
 				auto source = p->GetArgument<std::vector<int64_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<int64_t>(*source, mono_get_int64_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<int64_t>(*source, mono_get_int64_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayUint8: {
 				auto source = p->GetArgument<std::vector<uint8_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<uint8_t>(*source, mono_get_byte_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<uint8_t>(*source, mono_get_byte_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayUint16: {
 				auto source = p->GetArgument<std::vector<uint16_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<uint16_t>(*source, mono_get_uint16_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<uint16_t>(*source, mono_get_uint16_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayUint32: {
 				auto source = p->GetArgument<std::vector<uint32_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<uint32_t>(*source, mono_get_uint32_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<uint32_t>(*source, mono_get_uint32_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayUint64: {
 				auto source = p->GetArgument<std::vector<uint64_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<uint64_t>(*source, mono_get_uint64_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<uint64_t>(*source, mono_get_uint64_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayPtr64: {
 				auto source = p->GetArgument<std::vector<uintptr_t>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<uintptr_t>(*source, mono_get_uintptr_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<uintptr_t>(*source, mono_get_uintptr_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayFloat: {
 				auto source = p->GetArgument<std::vector<float>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<float>(*source, mono_get_single_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<float>(*source, mono_get_single_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayDouble: {
 				auto source = p->GetArgument<std::vector<double>*>(i);
-				args.push_back(source != nullptr ? CreateArrayT<double>(*source, mono_get_double_class) : nullptr);
+				args[j] = source != nullptr ? CreateArrayT<double>(*source, mono_get_double_class) : nullptr;
 				break;
 			}
 			case ValueType::ArrayString: {
 				auto source = p->GetArgument<std::vector<std::string>*>(i);
-				args.push_back(source != nullptr ? g_csharplm.CreateStringArray(*source) : nullptr);
+				args[j] = source != nullptr ? g_csharplm.CreateStringArray(*source) : nullptr;
 				break;
 			}
 		}
+		++j;
 	}
 
 	MonoObject* exception = nullptr;
@@ -729,12 +730,12 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 	}
 
 	if (hasRefs) {
-		for (uint8_t i = 0; i < count; ++i) {
-			auto& param = method->paramTypes[i];
+		for (uint8_t i = hasRet, j = 0; i < count; ++i) {
+			auto& param = method->paramTypes[j];
 			if (param.ref) {
 				switch (param.type) {
 					case ValueType::String: {
-						auto source = (MonoString*) args[i];
+						auto source = (MonoString*) args[j];
 						if (source != nullptr)  {
 							auto dest = p->GetArgument<std::string*>(i);
 							*dest = utils::MonoStringToString(source);
@@ -742,7 +743,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayBool: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<bool>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -750,7 +751,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayChar8: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<char>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -758,7 +759,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayChar16: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<char16_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -766,7 +767,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt8: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int8_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -774,7 +775,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt16: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int16_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -782,7 +783,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt32: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int32_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -790,7 +791,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt64: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int64_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -798,7 +799,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayUint8: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint8_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -806,7 +807,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayUint16: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint16_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -814,7 +815,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayUint32: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint32_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -822,7 +823,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayUint64: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint64_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -830,7 +831,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayPtr64: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uintptr_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -838,7 +839,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayFloat: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<float>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -846,7 +847,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayDouble: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<double>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -854,7 +855,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayString: {
-						auto source = (MonoArray*) args[i];
+						auto source = (MonoArray*) args[j];
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<std::string>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -865,6 +866,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 				}
 			}
+			++j;
 		}
 	}
 
@@ -943,8 +945,132 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			ret->SetReturnPtr<double>(val);
 			break;
 		}
-		default: {
-			// If you return string, arrays or big structs, they usually passed as 1st argument
+		case ValueType::String: {
+			MonoString* source = (MonoString*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::string*>(0);
+				*dest = utils::MonoStringToString(source);
+			}
+			break;
+		}
+		case ValueType::ArrayBool: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<bool>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayChar8: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<char>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayChar16: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<wchar_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayInt8: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<int8_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayInt16: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<int16_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayInt32: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<int32_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayInt64: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<int64_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayUint8: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<uint8_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayUint16: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<uint16_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayUint32: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<uint32_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayUint64: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<uint64_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayPtr64: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<uintptr_t>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayFloat: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<float>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayDouble: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<double>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
+			break;
+		}
+		case ValueType::ArrayString: {
+			MonoArray* source = (MonoArray*) result;
+			if (source != nullptr) {
+				auto dest = p->GetArgument<std::vector<std::string>*>(0);
+				utils::MonoArrayToVector(source, *dest);
+			}
 			break;
 		}
 	}
