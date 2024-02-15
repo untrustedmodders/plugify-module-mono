@@ -6,7 +6,7 @@
 
 using namespace csharplm;
 
-#define PLUG_ADD_INTERNAL_CALL(name) mono_add_internal_call("Plugify.InternalCalls::" #name, (const void*)&(name))
+#define PLUG_ADD_INTERNAL_CALL(name) mono_add_internal_call("Plugify.InternalCalls::" #name, (const void*) &(name))
 
 static MonoObject* Plugin_FindPluginByName(MonoString* name) {
 	char* nameCStr = mono_string_to_utf8(name);
