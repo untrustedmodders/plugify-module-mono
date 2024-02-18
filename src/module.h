@@ -11,8 +11,10 @@ extern "C" {
 	typedef struct _MonoMethod MonoMethod;
 	typedef struct _MonoAssembly MonoAssembly;
 	typedef struct _MonoImage MonoImage;
+	typedef struct _MonoReferenceQueue MonoReferenceQueue;
 	typedef struct _MonoClassField MonoClassField;
 	typedef struct _MonoArray MonoArray;
+	typedef struct _MonoDelegate MonoDelegate;
 	typedef struct _MonoString MonoString;
 	typedef struct _MonoDomain MonoDomain;
 	typedef int32_t mono_bool;
@@ -51,8 +53,9 @@ namespace csharplm {
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
 
-		//template<typename T, typename C>
-		//MonoArray* CreateArrayT(const std::vector<T>& source, C& klass) const;
+		template<typename T, typename C>
+		static MonoArray* CreateArrayT(const std::vector<T>& source, C& klass);
+		MonoDelegate* CreateDelegate(void* func, const plugify::Method& method);
 		MonoString* CreateString(const std::string& source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
 		MonoArray* CreateStringArray(const std::vector<std::string>& source) const;
@@ -74,12 +77,19 @@ namespace csharplm {
 		static void ExternalCall(const plugify::Method* method, void* addr, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 		static void InternalCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
+		template<typename T>
+		static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
+		static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
+		static void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method, std::vector<void*>& args);
+
 	private:
 		MonoDomain* _rootDomain{ nullptr };
 		MonoDomain* _appDomain{ nullptr };
 
 		MonoAssembly* _coreAssembly{ nullptr };
 		MonoImage* _coreImage{ nullptr };
+
+		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
 
 		struct ImportMethod {
 			MethodRef method;
@@ -95,9 +105,13 @@ namespace csharplm {
 		std::shared_ptr<plugify::IPlugifyProvider> _provider;
 		std::unordered_map<std::string, ImportMethod> _importMethods;
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
-
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::vector<plugify::Function> _functions;
+
+		std::vector<MonoClass*> _funcClasses;
+		std::vector<MonoClass*> _actionClasses;
+
+		const size_t kDelegateCount = 17;
 
 		ScriptMap _scripts;
 

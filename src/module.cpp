@@ -18,8 +18,11 @@
 #include <plugify/plugin_descriptor.h>
 #include <plugify/plugify_provider.h>
 
-#include <glaze/glaze.hpp>
 #include <dyncall/dyncall.h>
+#include <glaze/glaze.hpp>
+
+MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
+MONO_API void* mono_delegate_to_ftnptr(MonoDelegate* delegate);
 
 using namespace csharplm;
 using namespace plugify;
@@ -92,8 +95,8 @@ namespace csharplm::utils {
 		mono_free(cStr);
 	}
 
-	void MonoStringToCWStr(MonoString* string, wchar_t* dest) {
-		wchar_t* cWStr = mono_string_to_utf16(string);
+	void MonoStringToCWStr(MonoString* string, char16_t* dest) {
+		char16_t* cWStr = mono_string_to_utf16(string);
 		wcscpy_s(dest, wcslen(dest), cWStr);
 		mono_free(cWStr);
 	}*/
@@ -115,7 +118,7 @@ namespace csharplm::utils {
 	std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
 		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
 		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
-		MonoString* messageString = (MonoString*) mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr);
+		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
 		if (messageString != nullptr)
 			return MonoStringToString(messageString);
 		return {};
@@ -130,20 +133,20 @@ namespace csharplm::utils {
 			if constexpr (std::is_same_v<T, char*>) {
 				if (dest[i] != nullptr) {
 					if (element != nullptr)
-						MonoStringToCStr((MonoString*)element, dest[i]);
+						MonoStringToCStr(reinterpret_cast<MonoString*>(element), dest[i]);
 					else if (strlen(dest[i]))
 						dest[i][0] = '\0';
 				}
-			} else if constexpr (std::is_same_v<T, wchar_t*>) {
+			} else if constexpr (std::is_same_v<T, char16_t*>) {
 				if (dest[i] != nullptr) {
 					if (element != nullptr)
-						MonoStringToCWStr((MonoString*)element, dest[i]);
+						MonoStringToCWStr(reinterpret_cast<MonoString*>(element), dest[i]);
 					else if (wcslen(dest[i]))
 						dest[i][0] = '\0';
 				}
 			} else {
 				if (element != nullptr)
-					dest[i] = *(T*) mono_object_unbox(element);
+					dest[i] = *reinterpret_cast<T*>(mono_object_unbox(element));
 				else
 					dest[i] = T{};
 			}
@@ -159,19 +162,19 @@ namespace csharplm::utils {
 			MonoObject* element = mono_array_get(array, MonoObject*, i);
 			if constexpr (std::is_same_v<T, std::string>) {
 				if (element != nullptr)
-					dest[i] = MonoStringToString((MonoString*)element);
+					dest[i] = MonoStringToString(reinterpret_cast<MonoString*>(element));
 				else
-					dest[i] = {};
+					dest[i] = T{};
 			} else if constexpr (std::is_same_v<T, std::wstring>) {
 				if (element != nullptr)
-					dest[i] = MonoStringToWString((MonoString*)element);
+					dest[i] = MonoStringToWString(reinterpret_cast<MonoString*>(element));
 				else
-					dest[i] = {};
+					dest[i] = T{};
 			} else {
 				if (element != nullptr)
-					dest[i] = *(T*) mono_object_unbox(element);
+					dest[i] = *reinterpret_cast<T*>(mono_object_unbox(element));
 				else
-					dest[i] = {};
+					dest[i] = T{};
 			}
 		}
 	}
@@ -185,10 +188,10 @@ namespace csharplm::utils {
 			{ "System.Int16", ValueType::Int16 },
 			{ "System.Int32", ValueType::Int32 },
 			{ "System.Int64", ValueType::Int64 },
-			{ "System.Byte", ValueType::Uint8 },
-			{ "System.UInt16", ValueType::Uint16 },
-			{ "System.UInt32", ValueType::Uint32 },
-			{ "System.UInt64", ValueType::Uint64 },
+			{ "System.Byte", ValueType::UInt8 },
+			{ "System.UInt16", ValueType::UInt16 },
+			{ "System.UInt32", ValueType::UInt32 },
+			{ "System.UInt64", ValueType::UInt64 },
 			{ "System.IntPtr", ValueType::Ptr64 },
 			{ "System.UIntPtr", ValueType::Ptr64 },
 			{ "System.Single", ValueType::Float },
@@ -200,15 +203,51 @@ namespace csharplm::utils {
 			{ "System.Int16[]", ValueType::ArrayInt16 },
 			{ "System.Int32[]", ValueType::ArrayInt32 },
 			{ "System.Int64[]", ValueType::ArrayInt64 },
-			{ "System.Byte[]", ValueType::ArrayUint8 },
-			{ "System.UInt16[]", ValueType::ArrayUint16 },
-			{ "System.UInt32[]", ValueType::ArrayUint32 },
-			{ "System.UInt64[]", ValueType::ArrayUint64 },
+			{ "System.Byte[]", ValueType::ArrayUInt8 },
+			{ "System.UInt16[]", ValueType::ArrayUInt16 },
+			{ "System.UInt32[]", ValueType::ArrayUInt32 },
+			{ "System.UInt64[]", ValueType::ArrayUInt64 },
 			{ "System.IntPtr[]", ValueType::ArrayPtr64 },
 			{ "System.UIntPtr[]", ValueType::ArrayPtr64 },
 			{ "System.Single[]", ValueType::ArrayFloat },
 			{ "System.Double[]", ValueType::ArrayDouble },
 			{ "System.String[]", ValueType::ArrayString },
+
+			{ "System.Delegate", ValueType::Function },
+			{ "System.Func`1", ValueType::Function },
+			{ "System.Func`2", ValueType::Function },
+			{ "System.Func`3", ValueType::Function },
+			{ "System.Func`4", ValueType::Function },
+			{ "System.Func`5", ValueType::Function },
+			{ "System.Func`6", ValueType::Function },
+			{ "System.Func`7", ValueType::Function },
+			{ "System.Func`8", ValueType::Function },
+			{ "System.Func`9", ValueType::Function },
+			{ "System.Func`10", ValueType::Function },
+			{ "System.Func`11", ValueType::Function },
+			{ "System.Func`12", ValueType::Function },
+			{ "System.Func`13", ValueType::Function },
+			{ "System.Func`14", ValueType::Function },
+			{ "System.Func`15", ValueType::Function },
+			{ "System.Func`16", ValueType::Function },
+			{ "System.Func`17", ValueType::Function },
+			{ "System.Action", ValueType::Function },
+			{ "System.Action`1", ValueType::Function },
+			{ "System.Action`2", ValueType::Function },
+			{ "System.Action`3", ValueType::Function },
+			{ "System.Action`4", ValueType::Function },
+			{ "System.Action`5", ValueType::Function },
+			{ "System.Action`6", ValueType::Function },
+			{ "System.Action`7", ValueType::Function },
+			{ "System.Action`8", ValueType::Function },
+			{ "System.Action`9", ValueType::Function },
+			{ "System.Action`10", ValueType::Function },
+			{ "System.Action`11", ValueType::Function },
+			{ "System.Action`12", ValueType::Function },
+			{ "System.Action`13", ValueType::Function },
+			{ "System.Action`14", ValueType::Function },
+			{ "System.Action`15", ValueType::Function },
+			{ "System.Action`16", ValueType::Function },
 		};
 		auto it = valueTypeMap.find(typeName);
 		if (it != valueTypeMap.end())
@@ -234,6 +273,11 @@ namespace csharplm::utils {
 
 		return output;
 	}
+}
+
+void FunctionRefQueueCallback(void* function) {
+	printf("Function was delete");
+	delete reinterpret_cast<Function*>(function);
 }
 
 InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> provider, const IModule& module) {
@@ -289,14 +333,57 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!pluginCtor)
 		return ErrorData{ std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string()) };
 
+	MonoImage* msCoreImage = mono_get_corlib();
+
+	_funcClasses.reserve(kDelegateCount);
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`1"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`2"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`3"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`4"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`5"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`6"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`7"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`8"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`9"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`10"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`11"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`12"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`13"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`14"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`15"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`16"));
+	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`17"));
+	_funcClasses.reserve(kDelegateCount);
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`1"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`2"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`3"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`4"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`5"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`6"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`7"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`8"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`9"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`10"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`11"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`12"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`13"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`14"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`15"));
+	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`16"));
+
+	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
+
 	_provider->Log("[csharplm] Inited!", Severity::Debug);
 
 	return InitResultData{};
 }
 
 void CSharpLanguageModule::Shutdown() {
-	_exportMethods.clear();
+	_funcClasses.clear();
+	_actionClasses.clear();
 	_importMethods.clear();
+	_exportMethods.clear();
 	_functions.clear();
 	_methods.clear();
 	_scripts.clear();
@@ -378,26 +465,18 @@ void CSharpLanguageModule::ShutdownMono() {
 	_coreImage = nullptr;
 }
 
-template<typename T, typename C>
-MonoArray* CreateArrayT(const std::vector<T>& source, C& klass) {
-	MonoArray* array = g_csharplm.CreateArray(klass(), source.size());
-	for (size_t i = 0; i < source.size(); ++i) {
-		mono_array_set(array, T, i, source[i]);
-	}
-	return array;
-}
-
 template<typename T>
-void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args) {
+void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, std::vector<void*>& args) {
 	auto* dest = new std::vector<T>();
 	if (source != nullptr) {
 		utils::MonoArrayToVector(source, *dest);
 	}
-	args.push_back((void*) dest);
+
+	args.push_back(dest);
 	return dest;
 }
 
-void* MonoStringToArg(MonoString* source, std::vector<void*>& args) {
+void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void*>& args) {
 	std::string* dest;
 	if (source != nullptr) {
 		char* cStr = mono_string_to_utf8(source);
@@ -406,74 +485,87 @@ void* MonoStringToArg(MonoString* source, std::vector<void*>& args) {
 	} else {
 		dest = new std::string();
 	}
-	args.push_back((void*) dest);
+	args.push_back(dest);
 	return dest;
+}
+
+void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method, std::vector<void*>& args) {
+	void* func = mono_delegate_to_ftnptr(source);
+	if (method.IsPrimitive()) {
+		args.push_back(func);
+	} else {
+		auto function = new plugify::Function(g_csharplm._rt);
+		void* methodAddr = function->GetJitFunc(method, &ExternalCall, func);
+		mono_gc_reference_queue_add(g_csharplm._functionReferenceQueue, reinterpret_cast<MonoObject*>(source), reinterpret_cast<void*>(function));
+		args.push_back(methodAddr);
+	}
+	return func;
 }
 
 void DeleteParam(std::vector<void*>& args, uint8_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::String: {
-			delete (std::string*) args[i++];
+			delete reinterpret_cast<std::string*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayBool: {
-			delete (std::vector<bool>*) args[i++];
+			delete reinterpret_cast<std::vector<bool>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayChar8: {
-			delete (std::vector<char>*) args[i++];
+			delete reinterpret_cast<std::vector<char>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayChar16: {
-			delete (std::vector<wchar_t>*) args[i++];
+			delete reinterpret_cast<std::vector<char16_t>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt8: {
-			delete (std::vector<int16_t>*) args[i++];
+			delete reinterpret_cast<std::vector<int16_t>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt16: {
-			delete (std::vector<int16_t>*) args[i++];
+			delete reinterpret_cast<std::vector<int16_t>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt32: {
-			delete (std::vector<int32_t>*) args[i++];
+			delete reinterpret_cast<std::vector<int32_t>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt64: {
-			delete (std::vector<int64_t>*) args[i++];
+			delete reinterpret_cast<std::vector<int64_t>*>(args[i++]);
 			break;
 		}
-		case ValueType::ArrayUint8: {
-			delete (std::vector<uint8_t>*) args[i++];
+		case ValueType::ArrayUInt8: {
+			delete reinterpret_cast<std::vector<uint8_t>*>(args[i++]);
 			break;
 		}
-		case ValueType::ArrayUint16: {
-			delete (std::vector<uint16_t>*) args[i++];
+		case ValueType::ArrayUInt16: {
+			delete reinterpret_cast<std::vector<uint16_t>*>(args[i++]);
 			break;
 		}
-		case ValueType::ArrayUint32: {
-			delete (std::vector<uint32_t>*) args[i++];
+		case ValueType::ArrayUInt32: {
+			delete reinterpret_cast<std::vector<uint32_t>*>(args[i++]);
 			break;
 		}
-		case ValueType::ArrayUint64: {
-			delete (std::vector<uint64_t>*) args[i++];
+		case ValueType::ArrayUInt64: {
+			delete reinterpret_cast<std::vector<uint64_t>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayPtr64: {
-			delete (std::vector<uintptr_t>*) args[i++];
+			delete reinterpret_cast<std::vector<uintptr_t>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayFloat: {
-			delete (std::vector<float>*) args[i++];
+			delete reinterpret_cast<std::vector<float>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayDouble: {
-			delete (std::vector<double>*) args[i++];
+			delete reinterpret_cast<std::vector<double>*>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayString: {
-			delete (std::vector<std::string>*) args[i++];
+			delete reinterpret_cast<std::vector<std::string>*>(args[i++]);
 			break;
 		}
 		default: {
@@ -509,7 +601,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				dcArgPointer(vm, MonoArrayToArg<char>(nullptr, args));
 				break;
 			case ValueType::ArrayChar16:
-				dcArgPointer(vm, MonoArrayToArg<wchar_t>(nullptr, args));
+				dcArgPointer(vm, MonoArrayToArg<char16_t>(nullptr, args));
 				break;
 			case ValueType::ArrayInt8:
 				dcArgPointer(vm, MonoArrayToArg<int8_t>(nullptr, args));
@@ -523,16 +615,16 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			case ValueType::ArrayInt64:
 				dcArgPointer(vm, MonoArrayToArg<int64_t>(nullptr, args));
 				break;
-			case ValueType::ArrayUint8:
+			case ValueType::ArrayUInt8:
 				dcArgPointer(vm, MonoArrayToArg<uint8_t>(nullptr, args));
 				break;
-			case ValueType::ArrayUint16:
+			case ValueType::ArrayUInt16:
 				dcArgPointer(vm, MonoArrayToArg<uint16_t>(nullptr, args));
 				break;
-			case ValueType::ArrayUint32:
+			case ValueType::ArrayUInt32:
 				dcArgPointer(vm, MonoArrayToArg<uint32_t>(nullptr, args));
 				break;
-			case ValueType::ArrayUint64:
+			case ValueType::ArrayUInt64:
 				dcArgPointer(vm, MonoArrayToArg<uint64_t>(nullptr, args));
 				break;
 			case ValueType::ArrayPtr64:
@@ -567,15 +659,18 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::Int16:
 				case ValueType::Int32:
 				case ValueType::Int64:
-				case ValueType::Uint8:
-				case ValueType::Uint16:
-				case ValueType::Uint32:
-				case ValueType::Uint64:
+				case ValueType::UInt8:
+				case ValueType::UInt16:
+				case ValueType::UInt32:
+				case ValueType::UInt64:
 				case ValueType::Ptr64:
 				case ValueType::Float:
 				case ValueType::Double:
-				case ValueType::Function:
 					dcArgPointer(vm, p->GetArgumentPtr(i));
+					break;
+				// MonoDelegate*
+				case ValueType::Function:
+					dcArgPointer(vm, MonoDelegateToArg(p->GetArgument<MonoDelegate*>(i), *param.prototype, args));
 					break;
 				// MonoString*
 				case ValueType::String:
@@ -589,7 +684,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgPointer(vm, MonoArrayToArg<char>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayChar16:
-					dcArgPointer(vm, MonoArrayToArg<wchar_t>(p->GetArgument<MonoArray*>(i), args));
+					dcArgPointer(vm, MonoArrayToArg<char16_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayInt8:
 					dcArgPointer(vm, MonoArrayToArg<int8_t>(p->GetArgument<MonoArray*>(i), args));
@@ -603,16 +698,16 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::ArrayInt64:
 					dcArgPointer(vm, MonoArrayToArg<int64_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint8:
+				case ValueType::ArrayUInt8:
 					dcArgPointer(vm, MonoArrayToArg<uint8_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint16:
+				case ValueType::ArrayUInt16:
 					dcArgPointer(vm, MonoArrayToArg<uint16_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint32:
+				case ValueType::ArrayUInt32:
 					dcArgPointer(vm, MonoArrayToArg<uint32_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint64:
+				case ValueType::ArrayUInt64:
 					dcArgPointer(vm, MonoArrayToArg<uint64_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayPtr64:
@@ -643,24 +738,23 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgChar(vm, p->GetArgument<char>(i));
 					break;
 				case ValueType::Char16:
-					dcArgShort(vm, static_cast<short>(p->GetArgument<wchar_t>(i)));
+					dcArgShort(vm, static_cast<short>(p->GetArgument<char16_t>(i)));
 					break;
 				case ValueType::Int8:
-				case ValueType::Uint8:
+				case ValueType::UInt8:
 					dcArgChar(vm, p->GetArgument<int8_t>(i));
 					break;
 				case ValueType::Int16:
-				case ValueType::Uint16:
+				case ValueType::UInt16:
 					dcArgShort(vm, p->GetArgument<int16_t>(i));
 					break;
 				case ValueType::Int32:
-				case ValueType::Uint32:
+				case ValueType::UInt32:
 					dcArgInt(vm, p->GetArgument<int32_t>(i));
 					break;
 				case ValueType::Int64:
-				case ValueType::Uint64:
+				case ValueType::UInt64:
 					dcArgLongLong(vm, p->GetArgument<int64_t>(i));
-				case ValueType::Function:
 				case ValueType::Ptr64:
 					dcArgPointer(vm, p->GetArgument<void*>(i));
 					break;
@@ -669,6 +763,10 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 				case ValueType::Double:
 					dcArgDouble(vm, p->GetArgument<double>(i));
+					break;
+				// MonoDelegate*
+				case ValueType::Function:
+					dcArgPointer(vm, MonoDelegateToArg(p->GetArgument<MonoDelegate*>(i), *param.prototype, args));
 					break;
 				// MonoString*
 				case ValueType::String:
@@ -682,7 +780,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgPointer(vm, MonoArrayToArg<char>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayChar16:
-					dcArgPointer(vm, MonoArrayToArg<wchar_t>(p->GetArgument<MonoArray*>(i), args));
+					dcArgPointer(vm, MonoArrayToArg<char16_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayInt8:
 					dcArgPointer(vm, MonoArrayToArg<int8_t>(p->GetArgument<MonoArray*>(i), args));
@@ -696,16 +794,16 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::ArrayInt64:
 					dcArgPointer(vm, MonoArrayToArg<int64_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint8:
+				case ValueType::ArrayUInt8:
 					dcArgPointer(vm, MonoArrayToArg<uint8_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint16:
+				case ValueType::ArrayUInt16:
 					dcArgPointer(vm, MonoArrayToArg<uint16_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint32:
+				case ValueType::ArrayUInt32:
 					dcArgPointer(vm, MonoArrayToArg<uint32_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayUint64:
+				case ValueType::ArrayUInt64:
 					dcArgPointer(vm, MonoArrayToArg<uint64_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayPtr64:
@@ -749,7 +847,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		case ValueType::Char16: {
-			wchar_t val = static_cast<wchar_t>(dcCallShort(vm, addr));
+			char16_t val = static_cast<char16_t>(dcCallShort(vm, addr));
 			ret->SetReturnPtr(val);
 			break;
 		}
@@ -773,27 +871,26 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			ret->SetReturnPtr(val);
 			break;
 		}
-		case ValueType::Uint8: {
+		case ValueType::UInt8: {
 			uint8_t val = static_cast<uint8_t>(dcCallChar(vm, addr));
 			ret->SetReturnPtr(val);
 			break;
 		}
-		case ValueType::Uint16: {
+		case ValueType::UInt16: {
 			uint16_t val = static_cast<uint16_t>(dcCallShort(vm, addr));
 			ret->SetReturnPtr(val);
 			break;
 		}
-		case ValueType::Uint32: {
+		case ValueType::UInt32: {
 			uint32_t val = static_cast<uint32_t>(dcCallInt(vm, addr));
 			ret->SetReturnPtr(val);
 			break;
 		}
-		case ValueType::Uint64: {
+		case ValueType::UInt64: {
 			uint64_t val = static_cast<uint64_t>(dcCallLongLong(vm, addr));
 			ret->SetReturnPtr(val);
 			break;
 		}
-		case ValueType::Function:
 		case ValueType::Ptr64: {
 			void* val = dcCallPointer(vm, addr);
 			ret->SetReturnPtr(val);
@@ -809,84 +906,89 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			ret->SetReturnPtr(val);
 			break;
 		}
+		case ValueType::Function: {
+			void* val = dcCallPointer(vm, addr);
+			// C func ptr
+			ret->SetReturnPtr(g_csharplm.CreateDelegate(val, *method->retType.prototype));
+		}
 		case ValueType::String: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateString(*(std::string*)args[0]));
+			ret->SetReturnPtr(g_csharplm.CreateString(*reinterpret_cast<std::string*>(args[0])));
 			break;
 		}
 		case ValueType::ArrayBool: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<bool>(*(std::vector<bool>*)args[0], mono_get_char_class));
+			ret->SetReturnPtr(CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[0]), mono_get_char_class));
 			break;
 		}
 		case ValueType::ArrayChar8: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<char>(*(std::vector<char>*)args[0], mono_get_char_class));
+			ret->SetReturnPtr(CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[0]), mono_get_char_class));
 			break;
 		}
 		case ValueType::ArrayChar16: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<wchar_t>(*(std::vector<wchar_t>*)args[0], mono_get_int16_class));
+			ret->SetReturnPtr(CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[0]), mono_get_int16_class));
 			break;
 		}
 		case ValueType::ArrayInt8: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<int8_t>(*(std::vector<int8_t>*)args[0], mono_get_sbyte_class));
+			ret->SetReturnPtr(CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[0]), mono_get_sbyte_class));
 			break;
 		}
 		case ValueType::ArrayInt16: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<int16_t>(*(std::vector<int16_t>*)args[0], mono_get_int16_class));
+			ret->SetReturnPtr(CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[0]), mono_get_int16_class));
 			break;
 		}
 		case ValueType::ArrayInt32: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<int32_t>(*(std::vector<int32_t>*)args[0], mono_get_int32_class));
+			ret->SetReturnPtr(CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[0]), mono_get_int32_class));
 			break;
 		}
 		case ValueType::ArrayInt64: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<int64_t>(*(std::vector<int64_t>*)args[0], mono_get_int64_class));
+			ret->SetReturnPtr(CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[0]), mono_get_int64_class));
 			break;
 		}
-		case ValueType::ArrayUint8: {
+		case ValueType::ArrayUInt8: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<uint8_t>(*(std::vector<uint8_t>*)args[0], mono_get_byte_class));
+			ret->SetReturnPtr(CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[0]), mono_get_byte_class));
 			break;
 		}
-		case ValueType::ArrayUint16: {
+		case ValueType::ArrayUInt16: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<uint16_t>(*(std::vector<uint16_t>*)args[0], mono_get_uint16_class));
+			ret->SetReturnPtr(CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[0]), mono_get_uint16_class));
 			break;
 		}
-		case ValueType::ArrayUint32: {
+		case ValueType::ArrayUInt32: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<uint32_t>(*(std::vector<uint32_t>*)args[0], mono_get_uint32_class));
+			ret->SetReturnPtr(CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[0]), mono_get_uint32_class));
 			break;
 		}
-		case ValueType::ArrayUint64: {
+		case ValueType::ArrayUInt64: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<uint64_t>(*(std::vector<uint64_t>*)args[0], mono_get_uint64_class));
+			ret->SetReturnPtr(CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[0]), mono_get_uint64_class));
 			break;
 		}
 		case ValueType::ArrayPtr64: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<uintptr_t>(*(std::vector<uintptr_t>*)args[0], mono_get_uintptr_class));
+			ret->SetReturnPtr(CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[0]), mono_get_uintptr_class));
 			break;
 		}
 		case ValueType::ArrayFloat: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<float>(*(std::vector<float>*)args[0], mono_get_single_class));
+			ret->SetReturnPtr(CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[0]), mono_get_single_class));
 			break;
 		}
 		case ValueType::ArrayDouble: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(CreateArrayT<double>(*(std::vector<double>*)args[0], mono_get_double_class));
+			ret->SetReturnPtr(CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[0]), mono_get_double_class));
 			break;
 		}
 		case ValueType::ArrayString: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateStringArray(*(std::vector<std::string>*)args[0]));
+			ret->SetReturnPtr(g_csharplm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[0])));
 			break;
 		}
 		default:
@@ -905,67 +1007,67 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				if (param.ref) {
 					switch (param.type) {
 						case ValueType::String: {
-							p->SetArgument(i, g_csharplm.CreateString(*(std::string*)args[j++]));
+							p->SetArgument(i, g_csharplm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
 							break;
 						}
 						case ValueType::ArrayBool: {
-							p->SetArgument(i, CreateArrayT<bool>(*(std::vector<bool>*)args[j++], mono_get_char_class));
+							p->SetArgument(i, CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[j++]), mono_get_char_class));
 							break;
 						}
 						case ValueType::ArrayChar8: {
-							p->SetArgument(i, CreateArrayT<char>(*(std::vector<char>*)args[j++], mono_get_char_class));
+							p->SetArgument(i, CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[j++]), mono_get_char_class));
 							break;
 						}
 						case ValueType::ArrayChar16: {
-							p->SetArgument(i, CreateArrayT<wchar_t>(*(std::vector<wchar_t>*)args[j++], mono_get_int16_class));
+							p->SetArgument(i, CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[j++]), mono_get_int16_class));
 							break;
 						}
 						case ValueType::ArrayInt8: {
-							p->SetArgument(i, CreateArrayT<int8_t>(*(std::vector<int8_t>*)args[j++], mono_get_sbyte_class));
+							p->SetArgument(i, CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[j++]), mono_get_sbyte_class));
 							break;
 						}
 						case ValueType::ArrayInt16: {
-							p->SetArgument(i, CreateArrayT<int16_t>(*(std::vector<int16_t>*)args[j++], mono_get_int16_class));
+							p->SetArgument(i, CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[j++]), mono_get_int16_class));
 							break;
 						}
 						case ValueType::ArrayInt32: {
-							p->SetArgument(i, CreateArrayT<int32_t>(*(std::vector<int32_t>*)args[j++], mono_get_int32_class));
+							p->SetArgument(i, CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[j++]), mono_get_int32_class));
 							break;
 						}
 						case ValueType::ArrayInt64: {
-							p->SetArgument(i, CreateArrayT<int64_t>(*(std::vector<int64_t>*)args[j++], mono_get_int64_class));
+							p->SetArgument(i, CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[j++]), mono_get_int64_class));
 							break;
 						}
-						case ValueType::ArrayUint8: {
-							p->SetArgument(i, CreateArrayT<uint8_t>(*(std::vector<uint8_t>*)args[j++], mono_get_byte_class));
+						case ValueType::ArrayUInt8: {
+							p->SetArgument(i, CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[j++]), mono_get_byte_class));
 							break;
 						}
-						case ValueType::ArrayUint16: {
-							p->SetArgument(i, CreateArrayT<uint16_t>(*(std::vector<uint16_t>*)args[j++], mono_get_uint16_class));
+						case ValueType::ArrayUInt16: {
+							p->SetArgument(i, CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[j++]), mono_get_uint16_class));
 							break;
 						}
-						case ValueType::ArrayUint32: {
-							p->SetArgument(i, CreateArrayT<uint32_t>(*(std::vector<uint32_t>*)args[j++], mono_get_uint32_class));
+						case ValueType::ArrayUInt32: {
+							p->SetArgument(i, CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[j++]), mono_get_uint32_class));
 							break;
 						}
-						case ValueType::ArrayUint64: {
-							p->SetArgument(i, CreateArrayT<uint64_t>(*(std::vector<uint64_t>*)args[j++], mono_get_uint64_class));
+						case ValueType::ArrayUInt64: {
+							p->SetArgument(i, CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[j++]), mono_get_uint64_class));
 							break;
 						}
 						case ValueType::ArrayPtr64: {
-							p->SetArgument(i, CreateArrayT<uintptr_t>(*(std::vector<uintptr_t>*)args[j++], mono_get_uintptr_class));
+							p->SetArgument(i, CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[j++]), mono_get_uintptr_class));
 							break;
 						}
 						case ValueType::ArrayFloat: {
-							p->SetArgument(i, CreateArrayT<float>(*(std::vector<float>*)args[j++], mono_get_single_class));
+							p->SetArgument(i, CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[j++]), mono_get_single_class));
 							break;
 						}
 						case ValueType::ArrayDouble: {
-							p->SetArgument(i, CreateArrayT<double>(*(std::vector<double>*)args[j++], mono_get_double_class));
+							p->SetArgument(i, CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[j++]), mono_get_double_class));
 							break;
 						}
 						case ValueType::ArrayString: {
-							p->SetArgument(i, g_csharplm.CreateStringArray(*(std::vector<std::string>*)args[j++]));
+							p->SetArgument(i, g_csharplm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[j++])));
 							break;
 						}
 						default:
@@ -1023,16 +1125,19 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			case ValueType::Int16:
 			case ValueType::Int32:
 			case ValueType::Int64:
-			case ValueType::Uint8:
-			case ValueType::Uint16:
-			case ValueType::Uint32:
-			case ValueType::Uint64:
+			case ValueType::UInt8:
+			case ValueType::UInt16:
+			case ValueType::UInt32:
+			case ValueType::UInt64:
 			case ValueType::Ptr64:
 			case ValueType::Float:
 			case ValueType::Double:
-			case ValueType::Function:
 				args[j] = p->GetArgumentPtr(i);
 				break;
+			case ValueType::Function: {
+				auto source = p->GetArgument<void*>(i);
+				args[j] = source != nullptr ? g_csharplm.CreateDelegate(source, *param.prototype) : nullptr;
+			}
 			case ValueType::String: {
 				auto source = p->GetArgument<std::string*>(i);
 				args[j] = source != nullptr ? g_csharplm.CreateString(*source) : nullptr;
@@ -1073,22 +1178,22 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 				args[j] = source != nullptr ? CreateArrayT<int64_t>(*source, mono_get_int64_class) : nullptr;
 				break;
 			}
-			case ValueType::ArrayUint8: {
+			case ValueType::ArrayUInt8: {
 				auto source = p->GetArgument<std::vector<uint8_t>*>(i);
 				args[j] = source != nullptr ? CreateArrayT<uint8_t>(*source, mono_get_byte_class) : nullptr;
 				break;
 			}
-			case ValueType::ArrayUint16: {
+			case ValueType::ArrayUInt16: {
 				auto source = p->GetArgument<std::vector<uint16_t>*>(i);
 				args[j] = source != nullptr ? CreateArrayT<uint16_t>(*source, mono_get_uint16_class) : nullptr;
 				break;
 			}
-			case ValueType::ArrayUint32: {
+			case ValueType::ArrayUInt32: {
 				auto source = p->GetArgument<std::vector<uint32_t>*>(i);
 				args[j] = source != nullptr ? CreateArrayT<uint32_t>(*source, mono_get_uint32_class) : nullptr;
 				break;
 			}
-			case ValueType::ArrayUint64: {
+			case ValueType::ArrayUInt64: {
 				auto source = p->GetArgument<std::vector<uint64_t>*>(i);
 				args[j] = source != nullptr ? CreateArrayT<uint64_t>(*source, mono_get_uint64_class) : nullptr;
 				break;
@@ -1131,7 +1236,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			if (param.ref) {
 				switch (param.type) {
 					case ValueType::String: {
-						auto source = (MonoString*) args[j];
+						auto source = reinterpret_cast<MonoString*>(args[j]);
 						if (source != nullptr)  {
 							auto dest = p->GetArgument<std::string*>(i);
 							*dest = utils::MonoStringToString(source);
@@ -1139,7 +1244,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayBool: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<bool>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1147,7 +1252,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayChar8: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<char>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1155,15 +1260,15 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayChar16: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<wchar_t>*>(i);
+							auto dest = p->GetArgument<std::vector<char16_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
 					case ValueType::ArrayInt8: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int8_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1171,7 +1276,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt16: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int16_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1179,7 +1284,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt32: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int32_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1187,39 +1292,39 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayInt64: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<int64_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
-					case ValueType::ArrayUint8: {
-						auto source = (MonoArray*) args[j];
+					case ValueType::ArrayUInt8: {
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint8_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
-					case ValueType::ArrayUint16: {
-						auto source = (MonoArray*) args[j];
+					case ValueType::ArrayUInt16: {
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint16_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
-					case ValueType::ArrayUint32: {
-						auto source = (MonoArray*) args[j];
+					case ValueType::ArrayUInt32: {
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint32_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
 						}
 						break;
 					}
-					case ValueType::ArrayUint64: {
-						auto source = (MonoArray*) args[j];
+					case ValueType::ArrayUInt64: {
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uint64_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1227,7 +1332,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayPtr64: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uintptr_t>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1235,7 +1340,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayFloat: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<float>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1243,7 +1348,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayDouble: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<double>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1251,7 +1356,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						break;
 					}
 					case ValueType::ArrayString: {
-						auto source = (MonoArray*) args[j];
+						auto source = reinterpret_cast<MonoArray*>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<std::string>*>(i);
 							utils::MonoArrayToVector(source, *dest);
@@ -1266,208 +1371,191 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 		}
 	}
 
-	switch (method->retType.type) {
-		case ValueType::Invalid:
-		case ValueType::Void:
-			break;
-		case ValueType::Bool: {
-			bool val = *(bool*) mono_object_unbox(result);
-			ret->SetReturnPtr<bool>(val);
-			break;
-		}
-		case ValueType::Char8: {
-			char val = *(char*) mono_object_unbox(result);
-			ret->SetReturnPtr<char>(val);
-			break;
-		}
-		case ValueType::Char16: {
-			wchar_t val = *(wchar_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<wchar_t>(val);
-			break;
-		}
-		case ValueType::Int8: {
-			int8_t val = *(int8_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<int8_t>(val);
-			break;
-		}
-		case ValueType::Int16: {
-			int16_t val = *(int16_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<int16_t>(val);
-			break;
-		}
-		case ValueType::Int32: {
-			int32_t val = *(int32_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<int32_t>(val);
-			break;
-		}
-		case ValueType::Int64: {
-			int64_t val = *(int64_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<int64_t>(val);
-			break;
-		}
-		case ValueType::Uint8: {
-			uint8_t val = *(uint8_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<uint8_t>(val);
-			break;
-		}
-		case ValueType::Uint16: {
-			uint16_t val = *(uint16_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<uint16_t>(val);
-			break;
-		}
-		case ValueType::Uint32: {
-			uint32_t val = *(uint32_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<uint32_t>(val);
-			break;
-		}
-		case ValueType::Uint64: {
-			uint64_t val = *(uint64_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<uint64_t>(val);
-			break;
-		}
-		case ValueType::Function:
-		case ValueType::Ptr64: {
-			uintptr_t val = *(uintptr_t*) mono_object_unbox(result);
-			ret->SetReturnPtr<uintptr_t>(val);
-			break;
-		}
-		case ValueType::Float: {
-			float val = *(float*) mono_object_unbox(result);
-			ret->SetReturnPtr<float>(val);
-			break;
-		}
-		case ValueType::Double: {
-			double val = *(double*) mono_object_unbox(result);
-			ret->SetReturnPtr<double>(val);
-			break;
-		}
-		case ValueType::String: {
-			MonoString* source = (MonoString*) result;
-			if (source != nullptr) {
+	if (result) {
+		switch (method->retType.type) {
+			case ValueType::Invalid:
+			case ValueType::Void:
+				break;
+			case ValueType::Bool: {
+				bool val = *reinterpret_cast<bool*>(mono_object_unbox(result));
+				ret->SetReturnPtr<bool>(val);
+				break;
+			}
+			case ValueType::Char8: {
+				char val = *reinterpret_cast<char*>(mono_object_unbox(result));
+				ret->SetReturnPtr<char>(val);
+				break;
+			}
+			case ValueType::Char16: {
+				char16_t val = *reinterpret_cast<char16_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<char16_t>(val);
+				break;
+			}
+			case ValueType::Int8: {
+				int8_t val = *reinterpret_cast<int8_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<int8_t>(val);
+				break;
+			}
+			case ValueType::Int16: {
+				int16_t val = *reinterpret_cast<int16_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<int16_t>(val);
+				break;
+			}
+			case ValueType::Int32: {
+				int32_t val = *reinterpret_cast<int32_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<int32_t>(val);
+				break;
+			}
+			case ValueType::Int64: {
+				int64_t val = *reinterpret_cast<int64_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<int64_t>(val);
+				break;
+			}
+			case ValueType::UInt8: {
+				uint8_t val = *reinterpret_cast<uint8_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<uint8_t>(val);
+				break;
+			}
+			case ValueType::UInt16: {
+				uint16_t val = *reinterpret_cast<uint16_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<uint16_t>(val);
+				break;
+			}
+			case ValueType::UInt32: {
+				uint32_t val = *reinterpret_cast<uint32_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<uint32_t>(val);
+				break;
+			}
+			case ValueType::UInt64: {
+				uint64_t val = *reinterpret_cast<uint64_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<uint64_t>(val);
+				break;
+			}
+			case ValueType::Ptr64: {
+				uintptr_t val = *reinterpret_cast<uintptr_t*>(mono_object_unbox(result));
+				ret->SetReturnPtr<uintptr_t>(val);
+				break;
+			}
+			case ValueType::Float: {
+				float val = *reinterpret_cast<float*>(mono_object_unbox(result));
+				ret->SetReturnPtr<float>(val);
+				break;
+			}
+			case ValueType::Double: {
+				double val = *reinterpret_cast<double*>(mono_object_unbox(result));
+				ret->SetReturnPtr<double>(val);
+				break;
+			}
+			case ValueType::Function: {
+				auto source = reinterpret_cast<MonoDelegate*>(result);
+				ret->SetReturnPtr<void*>(mono_delegate_to_ftnptr(source));
+				break;
+			}
+			case ValueType::String: {
+				auto source = reinterpret_cast<MonoString*>(result);
 				auto dest = p->GetArgument<std::string*>(0);
 				*dest = utils::MonoStringToString(source);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayBool: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayBool: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<bool>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayChar8: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayChar8: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<char>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayChar16: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
-				auto dest = p->GetArgument<std::vector<wchar_t>*>(0);
+			case ValueType::ArrayChar16: {
+				auto source = reinterpret_cast<MonoArray*>(result);
+				auto dest = p->GetArgument<std::vector<char16_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayInt8: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayInt8: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<int8_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayInt16: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayInt16: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<int16_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayInt32: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayInt32: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<int32_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayInt64: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayInt64: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<int64_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayUint8: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayUInt8: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<uint8_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayUint16: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayUInt16: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<uint16_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayUint32: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayUInt32: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<uint32_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayUint64: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayUInt64: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<uint64_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayPtr64: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayPtr64: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<uintptr_t>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayFloat: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayFloat: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<float>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayDouble: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayDouble: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<double>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
-		}
-		case ValueType::ArrayString: {
-			MonoArray* source = (MonoArray*) result;
-			if (source != nullptr) {
+			case ValueType::ArrayString: {
+				auto source = reinterpret_cast<MonoArray*>(result);
 				auto dest = p->GetArgument<std::vector<std::string>*>(0);
 				utils::MonoArrayToVector(source, *dest);
+				break;
 			}
-			break;
+		}
+	} else {
+		switch (method->retType.type) {
+			case ValueType::Invalid:
+			case ValueType::Void:
+				break;
+			default:
+				ret->SetReturnPtr<uintptr_t>({});
+				break;
 		}
 	}
 }
@@ -1609,7 +1697,7 @@ void CSharpLanguageModule::OnPluginStart(const IPlugin& plugin) {
 								const char* fieldName = mono_field_get_name(field);
 								MonoObject* fieldValue = mono_field_get_value_object(_appDomain, field, instance);
 								if (!strcmp(fieldName, "_method")) {
-									methodToFind = utils::MonoStringToString((MonoString*) fieldValue);
+									methodToFind = utils::MonoStringToString(reinterpret_cast<MonoString*>(fieldValue));
 									break;
 								}
 							}
@@ -1753,10 +1841,6 @@ void* CSharpLanguageModule::ValidateMethod(const plugify::Method& method, std::v
 			continue;
 		}
 
-		if (method.paramTypes[i].type == ValueType::Function && paramType == ValueType::Ptr64) {
-			paramType = ValueType::Function; // special case
-		}
-
 		if (paramType != method.paramTypes[i].type) {
 			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i].type), i, ValueTypeToString(paramType)));
 			continue;
@@ -1787,8 +1871,37 @@ ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 	return std::nullopt;
 }
 
+MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Method& method) {
+	size_t paramCount = method.paramTypes.size();
+	if (paramCount >= kDelegateCount) {
+		_provider->Log(std::format("[csharplm] Function '{}' has too much arguments to create delegate, maximum allowed param count is {}", method.name, kDelegateCount), Severity::Error);
+		return nullptr;
+	}
+
+	MonoClass* delegateClass = method.retType.type != ValueType::Void ? _funcClasses[paramCount] : _actionClasses[paramCount];
+
+	if (method.IsPrimitive()) {
+		return mono_ftnptr_to_delegate(delegateClass, func);
+	} else {
+		auto function = new plugify::Function(_rt);
+		void* methodAddr = function->GetJitFunc(method, &ExternalCall, func);
+		MonoDelegate* delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
+		mono_gc_reference_queue_add(_functionReferenceQueue, reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
+		return delegate;
+	}
+}
+
 MonoString* CSharpLanguageModule::CreateString(const std::string& source) const {
 	return source.empty() ? mono_string_empty(_appDomain) : mono_string_new(_appDomain, source.c_str());
+}
+
+template<typename T, typename C>
+MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, C& klass) {
+	MonoArray* array = g_csharplm.CreateArray(klass(), source.size());
+	for (size_t i = 0; i < source.size(); ++i) {
+		mono_array_set(array, T, i, source[i]);
+	}
+	return array;
 }
 
 MonoArray* CSharpLanguageModule::CreateArray(MonoClass* klass, size_t count) const {
