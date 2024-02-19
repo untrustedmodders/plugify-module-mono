@@ -44,25 +44,20 @@ namespace csharplm::utils {
 		if (!istream.is_open())
 			return {};
 		istream.unsetf(std::ios::skipws);
-		return { std::istreambuf_iterator<char>{istream}, std::istreambuf_iterator<char>{} };
+		return { std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
 	}
 
 	template<typename T>
-	bool ReadBytes(const fs::path& file, const std::function<void(std::span<T>)>& callback) {
-		std::ifstream istream(file, std::ios::binary);
+	std::vector<T> ReadBytes(const fs::path& filepath) {
+		std::ifstream istream(filepath, std::ios::binary);
 		if (!istream.is_open())
-			return false;
-		std::vector<T> buffer{ std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
-		callback({ buffer.data(), buffer.size() });
-		return true;
+			return {};
+		return { std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
 	}
 
 	MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
-		MonoImage* image = nullptr;
-
-		ReadBytes<char>(assemblyPath, [&image, &status](std::span<char> buffer) {
-			image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
-		});
+		auto buffer = ReadBytes<char>(assemblyPath);
+		MonoImage* image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
 
 		if (status != MONO_IMAGE_OK)
 			return nullptr;
@@ -71,9 +66,8 @@ namespace csharplm::utils {
 			fs::path pdbPath(assemblyPath);
 			pdbPath.replace_extension(".pdb");
 
-			ReadBytes<mono_byte>(pdbPath, [&image](std::span<mono_byte> buffer) {
-				mono_debug_open_image_from_memory(image, buffer.data(), static_cast<int>(buffer.size()));
-			});
+			auto bytes = ReadBytes<mono_byte>(pdbPath);
+			mono_debug_open_image_from_memory(image, bytes.data(), static_cast<int>(bytes.size()));
 
 			// If pdf not load ?
 		}
@@ -83,7 +77,7 @@ namespace csharplm::utils {
 		return assembly;
 	}
 
-	void PrintAssemblyTypes(MonoAssembly* assembly, const std::function<void(std::string)>& out) {
+	/*void PrintAssemblyTypes(MonoAssembly* assembly, const std::function<void(std::string)>& out) {
 		MonoImage* image = mono_assembly_get_image(assembly);
 		const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
 		int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
@@ -97,18 +91,6 @@ namespace csharplm::utils {
 
 			out(std::format("{}.{}", nameSpace, ".", + name));
 		}
-	}
-
-	/*void MonoStringToCStr(MonoString* string, char* dest) {
-		char* cStr = mono_string_to_utf8(string);
-		strcpy_s(dest, strlen(dest), cStr);
-		mono_free(cStr);
-	}
-
-	void MonoStringToCWStr(MonoString* string, char16_t* dest) {
-		char16_t* cWStr = mono_string_to_utf16(string);
-		wcscpy_s(dest, wcslen(dest), cWStr);
-		mono_free(cWStr);
 	}*/
 
 	std::string MonoStringToString(MonoString* string) {
@@ -124,45 +106,6 @@ namespace csharplm::utils {
 		mono_free(cWStr);
 		return str;
 	}
-
-	std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
-		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
-		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
-		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
-		if (messageString != nullptr)
-			return MonoStringToString(messageString);
-		return {};
-	}
-
-	/*template<typename T>
-	size_t MonoArrayToCArr(MonoArray* array, T* dest, size_t size) {
-		auto length = mono_array_length(array);
-		auto minLen = std::min(length, size);
-		for (size_t i = 0; i < minLen; ++i) {
-			MonoObject* element = mono_array_get(array, MonoObject*, i);
-			if constexpr (std::is_same_v<T, char*>) {
-				if (dest[i] != nullptr) {
-					if (element != nullptr)
-						MonoStringToCStr(reinterpret_cast<MonoString*>(element), dest[i]);
-					else if (strlen(dest[i]))
-						dest[i][0] = '\0';
-				}
-			} else if constexpr (std::is_same_v<T, char16_t*>) {
-				if (dest[i] != nullptr) {
-					if (element != nullptr)
-						MonoStringToCWStr(reinterpret_cast<MonoString*>(element), dest[i]);
-					else if (wcslen(dest[i]))
-						dest[i][0] = '\0';
-				}
-			} else {
-				if (element != nullptr)
-					dest[i] = *reinterpret_cast<T*>(mono_object_unbox(element));
-				else
-					dest[i] = T{};
-			}
-		}
-		return minLen;
-	}*/
 
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
@@ -265,6 +208,20 @@ namespace csharplm::utils {
 		return ValueType::Invalid;
 	}
 
+	std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
+		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
+		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
+		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
+		if (messageString != nullptr)
+			return MonoStringToString(messageString);
+		return {};
+	}
+
+	void CacheClass(std::vector<MonoClass*>& storage, const char* name) {
+		MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
+		if (klass != nullptr) storage.push_back(klass);
+	}
+	
 	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
 		std::vector<std::string_view> output;
 		size_t first = 0;
@@ -286,7 +243,6 @@ namespace csharplm::utils {
 }
 
 void FunctionRefQueueCallback(void* function) {
-	printf("Function was delete");
 	delete reinterpret_cast<Function*>(function);
 }
 
@@ -331,56 +287,49 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	// Retrieve and cache core classes/methods
 
 	/// Plugin
-	MonoClass* pluginClass = mono_class_from_name(_coreImage, "Plugify", "Plugin");
-	if (!pluginClass)
+	_pluginClass = mono_class_from_name(_coreImage, "Plugify", "Plugin");
+	if (!_pluginClass)
 		return ErrorData{ std::format("Failed to find 'Plugin' core class! Check '{}' assembly!", coreAssemblyPath.string()) };
 
-	MonoClass* subscribeAttribute = mono_class_from_name(_coreImage, "Plugify", "SubscribeAttribute");
-	if (!subscribeAttribute)
-		return ErrorData{ std::format("Failed to find 'SubscribeAttribute' core class! Check '{}' assembly!", coreAssemblyPath.string()) };
-
-	MonoMethod* pluginCtor = mono_class_get_method_from_name(pluginClass, ".ctor", 8);
-	if (!pluginCtor)
+	_pluginCtor = mono_class_get_method_from_name(_pluginClass, ".ctor", 8);
+	if (!_pluginCtor)
 		return ErrorData{ std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string()) };
 
-	MonoImage* msCoreImage = mono_get_corlib();
+	utils::CacheClass(_funcClasses, "Func`1");
+	utils::CacheClass(_funcClasses, "Func`2");
+	utils::CacheClass(_funcClasses, "Func`3");
+	utils::CacheClass(_funcClasses, "Func`4");
+	utils::CacheClass(_funcClasses, "Func`5");
+	utils::CacheClass(_funcClasses, "Func`6");
+	utils::CacheClass(_funcClasses, "Func`7");
+	utils::CacheClass(_funcClasses, "Func`8");
+	utils::CacheClass(_funcClasses, "Func`9");
+	utils::CacheClass(_funcClasses, "Func`10");
+	utils::CacheClass(_funcClasses, "Func`11");
+	utils::CacheClass(_funcClasses, "Func`12");
+	utils::CacheClass(_funcClasses, "Func`13");
+	utils::CacheClass(_funcClasses, "Func`14");
+	utils::CacheClass(_funcClasses, "Func`15");
+	utils::CacheClass(_funcClasses, "Func`16");
+	utils::CacheClass(_funcClasses, "Func`17");
 
-	_funcClasses.reserve(kDelegateCount);
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`1"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`2"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`3"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`4"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`5"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`6"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`7"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`8"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`9"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`10"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`11"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`12"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`13"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`14"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`15"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`16"));
-	_funcClasses.push_back(mono_class_from_name(msCoreImage, "System", "Func`17"));
-	_funcClasses.reserve(kDelegateCount);
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`1"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`2"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`3"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`4"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`5"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`6"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`7"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`8"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`9"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`10"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`11"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`12"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`13"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`14"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`15"));
-	_actionClasses.push_back(mono_class_from_name(msCoreImage, "System", "Action`16"));
+	utils::CacheClass(_actionClasses, "Action");
+	utils::CacheClass(_actionClasses, "Action`1");
+	utils::CacheClass(_actionClasses, "Action`2");
+	utils::CacheClass(_actionClasses, "Action`3");
+	utils::CacheClass(_actionClasses, "Action`4");
+	utils::CacheClass(_actionClasses, "Action`5");
+	utils::CacheClass(_actionClasses, "Action`6");
+	utils::CacheClass(_actionClasses, "Action`7");
+	utils::CacheClass(_actionClasses, "Action`8");
+	utils::CacheClass(_actionClasses, "Action`9");
+	utils::CacheClass(_actionClasses, "Action`10");
+	utils::CacheClass(_actionClasses, "Action`11");
+	utils::CacheClass(_actionClasses, "Action`12");
+	utils::CacheClass(_actionClasses, "Action`13");
+	utils::CacheClass(_actionClasses, "Action`14");
+	utils::CacheClass(_actionClasses, "Action`15");
+	utils::CacheClass(_actionClasses, "Action`16");
 
 	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
 
@@ -390,6 +339,8 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 }
 
 void CSharpLanguageModule::Shutdown() {
+	mono_gc_reference_queue_free(_functionReferenceQueue);
+
 	_funcClasses.clear();
 	_actionClasses.clear();
 	_importMethods.clear();
@@ -2144,104 +2095,6 @@ void CSharpLanguageModule::OnPluginStart(const IPlugin& plugin) {
 	if (scriptRef.has_value()) {
 		auto& script = scriptRef->get();
 
-		if (_config.subscribeFeature) {
-			std::vector<std::string> methodErrors;
-
-			MonoClass* subscribeClass = mono_class_from_name(_coreImage, "Plugify", "SubscribeAttribute");
-
-			const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(script._image, MONO_TABLE_TYPEDEF);
-			int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
-
-			for (int i = 0; i < numTypes; ++i) {
-				uint32_t cols[MONO_TYPEDEF_SIZE];
-				mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
-
-				const char* nameSpace = mono_metadata_string_heap(script._image, cols[MONO_TYPEDEF_NAMESPACE]);
-				const char* className = mono_metadata_string_heap(script._image, cols[MONO_TYPEDEF_NAME]);
-
-				MonoClass* monoClass = mono_class_from_name(script._image, nameSpace, className);
-				MonoObject* monoInstance = monoClass == script._klass ? script._instance : nullptr;
-
-				MonoMethod* monoMethod;
-				void* iter = nullptr;
-				while ((monoMethod = mono_class_get_methods(monoClass, &iter)) != nullptr) {
-					const char* methodName = mono_method_get_name(monoMethod);
-					MonoCustomAttrInfo* attributes = mono_custom_attrs_from_method(monoMethod);
-					if (attributes) {
-						for (int j = 0; j < attributes->num_attrs; ++j) {
-							MonoCustomAttrEntry& entry = attributes->attrs[j];
-							if (subscribeClass != mono_method_get_class(entry.ctor))
-								continue;
-
-							std::string methodToFind;
-
-							MonoObject* instance = mono_custom_attrs_get_attr(attributes, subscribeClass);
-							void* iterator = nullptr;
-							while (MonoClassField* field = mono_class_get_fields(subscribeClass, &iterator)) {
-								const char* fieldName = mono_field_get_name(field);
-								MonoObject* fieldValue = mono_field_get_value_object(_appDomain, field, instance);
-								if (!strcmp(fieldName, "_method")) {
-									methodToFind = utils::MonoStringToString(reinterpret_cast<MonoString*>(fieldValue));
-									break;
-								}
-							}
-
-							auto it = _importMethods.find(methodToFind);
-							if (it != _importMethods.end()) {
-								const auto& [ref, addr] = it->second;
-								auto& method = ref.get();
-								if (method.paramTypes.size() != 1) {
-									methodErrors.emplace_back(std::format("Destination method '{}' should have only 1 argument to subscribe", methodToFind));
-									continue;
-								}
-
-								const auto& [type, _, prototype] = *method.paramTypes.begin();
-								if (type != ValueType::Function) {
-									methodErrors.emplace_back(std::format("Parameter at index '1' of destination method '{}' should be 'function' type. Current type '{}' not supported", methodToFind, ValueTypeToString(type)));
-									continue;
-								}
-
-								if (!prototype) {
-									methodErrors.emplace_back(std::format("Could not subscribe to destination method '{}' which does not have prototype information", methodToFind));
-									continue;
-								}
-
-								// Generate a new method with same prototype
-								auto newMethod = std::make_unique<Method>(
-									methodName,
-									std::format("{}.{}.{}.{}", plugin.GetName(), nameSpace, className, methodName),
-									prototype->callConv,
-									prototype->paramTypes,
-									prototype->retType,
-									prototype->varIndex
-								);
-
-								void* methodAddr = ValidateMethod(*newMethod, methodErrors, monoInstance, monoMethod, nameSpace, className, methodName);
-								if (methodAddr) {
-									using RegisterCallbackFn = void(*)(void*);
-									auto func = reinterpret_cast<RegisterCallbackFn>(addr);
-									func(methodAddr);
-									_methods.emplace_back(std::move(newMethod));
-								}
-							} else {
-								methodErrors.emplace_back(std::format("Failed to find destination method '{}' to subscribe", methodToFind));
-							}
-							break;
-						}
-						mono_custom_attrs_free(attributes);
-					}
-				}
-			}
-
-			if (!methodErrors.empty()) {
-				std::string funcs(methodErrors[0]);
-				for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
-					std::format_to(std::back_inserter(funcs), ", {}", *it);
-				}
-				_provider->Log(std::format("[csharplm] Plugin '{}' has problems related to subscribe method(s): {}", plugin.GetName(), funcs), Severity::Warning);
-			}
-		}
-
 		script.InvokeOnStart();
 	}
 }
@@ -2256,8 +2109,6 @@ void CSharpLanguageModule::OnPluginEnd(const IPlugin& plugin) {
 }
 
 ScriptOpt CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin, MonoImage* image) {
-	MonoClass* pluginClass = mono_class_from_name(_coreImage, "Plugify", "Plugin");
-
 	const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
 	int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
 
@@ -2269,10 +2120,10 @@ ScriptOpt CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin, Mono
 		const char* className = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
 
 		MonoClass* monoClass = mono_class_from_name(image, nameSpace, className);
-		if (monoClass == pluginClass)
+		if (monoClass == _pluginClass)
 			continue;
 
-		bool isPlugin = mono_class_is_subclass_of(monoClass, pluginClass, false);
+		bool isPlugin = mono_class_is_subclass_of(monoClass, _pluginClass, false);
 		if (!isPlugin)
 			continue;
 
@@ -2356,9 +2207,11 @@ ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 }
 
 MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Method& method) {
+	auto& delegateClasses = method.retType.type != ValueType::Void ? _funcClasses : _actionClasses;
+
 	size_t paramCount = method.paramTypes.size();
-	if (paramCount >= kDelegateCount) {
-		_provider->Log(std::format("[csharplm] Function '{}' has too much arguments to create delegate, maximum allowed param count is {}", method.name, kDelegateCount), Severity::Error);
+	if (paramCount >= delegateClasses.size()) {
+		_provider->Log(std::format("[csharplm] Function '{}' has too much arguments to create delegate", method.name), Severity::Error);
 		return nullptr;
 	}
 
@@ -2491,9 +2344,6 @@ ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClas
 
 	// Call Script (base) constructor
 	{
-		MonoClass* pluginClass = mono_class_from_name(g_csharplm._coreImage, "Plugify", "Plugin");
-		MonoMethod* constructor = mono_class_get_method_from_name(pluginClass, ".ctor", 8);
-
 		const auto& desc = plugin.GetDescriptor();
 		auto id = plugin.GetId();
 		std::vector<std::string> deps;
@@ -2511,7 +2361,7 @@ ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClas
 			g_csharplm.CreateString(desc.createdByURL),
 			g_csharplm.CreateStringArray(deps),
 		};
-		mono_runtime_invoke(constructor, _instance, args.data(), nullptr);
+		mono_runtime_invoke(g_csharplm._pluginCtor, _instance, args.data(), nullptr);
 	}
 
 	_onStartMethod = mono_class_get_method_from_name(_klass, "OnStart", 0);

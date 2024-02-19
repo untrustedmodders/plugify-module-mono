@@ -90,6 +90,9 @@ namespace csharplm {
 		MonoAssembly* _coreAssembly{ nullptr };
 		MonoImage* _coreImage{ nullptr };
 
+		MonoClass* _pluginClass{ nullptr };
+		MonoMethod* _pluginCtor{ nullptr };
+
 		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
 
 		struct ImportMethod {
@@ -112,13 +115,10 @@ namespace csharplm {
 		std::vector<MonoClass*> _funcClasses;
 		std::vector<MonoClass*> _actionClasses;
 
-		const size_t kDelegateCount = 17;
-
 		ScriptMap _scripts;
 
 		struct MonoConfig {
 			bool enableDebugging{ false };
-			bool subscribeFeature{ true };
 			std::string level;
 			std::string mask;
 			std::vector<std::string> options;

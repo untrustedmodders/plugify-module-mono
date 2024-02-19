@@ -1,6 +1,5 @@
 {
 	"enableDebugging": true,
-	"subscribeFeature": true,
   	"level": "warning",
 	"mask": "",
 	"options": [
