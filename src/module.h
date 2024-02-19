@@ -76,11 +76,12 @@ namespace csharplm {
 
 		static void ExternalCall(const plugify::Method* method, void* addr, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 		static void InternalCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
+		static void DelegateCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
 		template<typename T>
 		static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
 		static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
-		static void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method, std::vector<void*>& args);
+		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) const;
 
 	private:
 		MonoDomain* _rootDomain{ nullptr };
@@ -106,7 +107,7 @@ namespace csharplm {
 		std::unordered_map<std::string, ImportMethod> _importMethods;
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
-		std::vector<plugify::Function> _functions;
+		std::unordered_map<void*, plugify::Function> _functions;
 
 		std::vector<MonoClass*> _funcClasses;
 		std::vector<MonoClass*> _actionClasses;
