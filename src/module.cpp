@@ -100,12 +100,12 @@ namespace csharplm::utils {
 		return str;
 	}
 
-	std::wstring MonoStringToWString(MonoString* string) {
-		wchar_t* cWStr = mono_string_to_utf16(string);
+	/*std::wstring MonoStringToWString(MonoString* string) {
+		char16_t* cWStr = mono_string_to_utf16(string);
 		std::wstring str(cWStr);
 		mono_free(cWStr);
 		return str;
-	}
+	}*/
 
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
@@ -118,12 +118,12 @@ namespace csharplm::utils {
 					dest[i] = MonoStringToString(reinterpret_cast<MonoString*>(element));
 				else
 					dest[i] = T{};
-			} else if constexpr (std::is_same_v<T, std::wstring>) {
+			}/* else if constexpr (std::is_same_v<T, std::wstring>) {
 				if (element != nullptr)
 					dest[i] = MonoStringToWString(reinterpret_cast<MonoString*>(element));
 				else
 					dest[i] = T{};
-			} else {
+			}*/ else {
 				if (element != nullptr)
 					dest[i] = *reinterpret_cast<T*>(mono_object_unbox(element));
 				else
@@ -731,6 +731,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::Int64:
 				case ValueType::UInt64:
 					dcArgLongLong(vm, p->GetArgument<int64_t>(i));
+					break;
 				case ValueType::Ptr64:
 					dcArgPointer(vm, p->GetArgument<void*>(i));
 					break;
@@ -885,6 +886,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		case ValueType::Function: {
 			void* val = dcCallPointer(vm, addr);
 			ret->SetReturnPtr(g_csharplm.CreateDelegate(val, *method->retType.prototype));
+			break;
 		}
 		case ValueType::String: {
 			dcCallVoid(vm, addr);
@@ -1112,6 +1114,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			case ValueType::Function: {
 				auto source = p->GetArgument<void*>(i);
 				args[j] = source != nullptr ? g_csharplm.CreateDelegate(source, *param.prototype) : nullptr;
+				break;
 			}
 			case ValueType::String: {
 				auto source = p->GetArgument<std::string*>(i);
@@ -1572,6 +1575,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 			case ValueType::Function: {
 				auto source = p->GetArgument<void*>(i);
 				args[j] = source != nullptr ? g_csharplm.CreateDelegate(source, *param.prototype) : nullptr;
+				break;
 			}
 			case ValueType::String: {
 				auto source = p->GetArgument<std::string*>(i);

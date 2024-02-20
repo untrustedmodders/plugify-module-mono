@@ -29,7 +29,28 @@ namespace plugify {
 }
 
 namespace csharplm {
-	class ScriptInstance;
+	class ScriptInstance {
+	public:
+		ScriptInstance(const plugify::IPlugin& plugin, MonoImage* image, MonoClass* klass);
+		~ScriptInstance();
+
+		operator bool() const { return _instance != nullptr; }
+		operator MonoObject*() const { return _instance; }
+		MonoObject* GetManagedObject() const { return _instance; }
+
+	private:
+		void InvokeOnStart() const;
+		void InvokeOnEnd() const;
+
+	private:
+		MonoImage* _image{ nullptr };
+		MonoClass* _klass{ nullptr };
+		MonoObject* _instance{ nullptr };
+		MonoMethod* _onStartMethod{ nullptr };
+		MonoMethod* _onEndMethod{ nullptr };
+
+		friend class CSharpLanguageModule;
+	};
 
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
 	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
@@ -125,29 +146,6 @@ namespace csharplm {
 		} _config;
 
 		friend class ScriptInstance;
-	};
-
-	class ScriptInstance {
-	public:
-		ScriptInstance(const plugify::IPlugin& plugin, MonoImage* image, MonoClass* klass);
-		~ScriptInstance();
-
-		operator bool() const { return _instance != nullptr; }
-		operator MonoObject*() const { return _instance; }
-		MonoObject* GetManagedObject() const { return _instance; }
-
-	private:
-		void InvokeOnStart() const;
-		void InvokeOnEnd() const;
-
-	private:
-		MonoImage* _image{ nullptr };
-		MonoClass* _klass{ nullptr };
-		MonoObject* _instance{ nullptr };
-		MonoMethod* _onStartMethod{ nullptr };
-		MonoMethod* _onEndMethod{ nullptr };
-
-		friend class CSharpLanguageModule;
 	};
 
 	extern CSharpLanguageModule g_csharplm;
