@@ -24,11 +24,6 @@ add_subdirectory(external/plugify)
 add_subdirectory(external/dyncall)
 
 #
-# Options
-#
-option(CSHARPLM_BUILD_CORE "Build core and sample plugins with Mono CSC" ON)
-
-#
 # Mono
 #
 set(MONO_LIBRARY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/lib)
@@ -66,37 +61,3 @@ endif()
 include(GenerateExportHeader)
 generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
-
-#
-# Plugify Core for C# plugins (Building with csc command directly might not work everywhere)
-#
-find_program(PYTHON_EXECUTABLE NAMES "python")
-if(CSHARPLM_BUILD_CORE AND PYTHON_EXECUTABLE)
-    function(csc_compilation name out sources args)
-        set(MAKE_CMD "csc ${args} -out:${out} ${sources}")
-        message("COMMAND: ${MAKE_CMD}")
-        execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import subprocess; subprocess.run('${MAKE_CMD}', shell=True)"
-                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    endfunction()
-
-    set(BUILD_FOLDER ${CMAKE_BINARY_DIR}/bin)
-    file(MAKE_DIRECTORY ${BUILD_FOLDER}/)
-
-    # Compile Plugify
-    file(GLOB_RECURSE PLUGIFY_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Plugify/Plugify/src/*.cs")
-    string(REPLACE ";" " " PLUGIFY_LIST "${PLUGIFY_SOURCES}")
-    csc_compilation(Plugify "${BUILD_FOLDER}/Plugify.dll" ${PLUGIFY_LIST} "-target:library")
-
-    # Compile Sample Plugins
-    file(GLOB_RECURSE PLUGIN_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "script-core/Plugins/Plugins/src/*.cs")
-    foreach(PLUGIN_SOURCE ${PLUGIN_SOURCES})
-        get_filename_component(PLUGIN_NAME ${PLUGIN_SOURCE} NAME_WLE)
-        set(PLUGIN_PATH "bin/${PLUGIN_NAME}.dll")
-
-        file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME})
-        file(MAKE_DIRECTORY ${BUILD_FOLDER}/${PLUGIN_NAME}/bin)
-
-        csc_compilation(${PLUGIN_NAME} "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_PATH}" ${PLUGIN_SOURCE} " -target:library -reference:${BUILD_FOLDER}/Plugify.dll")
-        configure_file("plugin.pplugin.in" "${BUILD_FOLDER}/${PLUGIN_NAME}/${PLUGIN_NAME}.pplugin")
-    endforeach()
-endif()

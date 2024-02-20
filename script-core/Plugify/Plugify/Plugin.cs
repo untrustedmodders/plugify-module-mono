@@ -1,7 +1,5 @@
 ﻿using System;
 
-#nullable enable
-
 namespace Plugify
 {
     public class Plugin : IEquatable<Plugin>, IComparable<Plugin>
@@ -24,7 +22,7 @@ namespace Plugify
             Version = string.Empty;
             Author = string.Empty;
             Website = string.Empty;
-            Dependencies = Array.Empty<string>();
+            Dependencies = new string[0];
         }
 
         internal Plugin(ulong id, string name, string fullName, string description, string version, string author, string website, string[] dependencies)
@@ -39,9 +37,9 @@ namespace Plugify
             Dependencies = dependencies;
         }
 
-        public Plugin? FindPluginByName(string name)
+        public Plugin FindPluginByName(string name)
         {
-            return (Plugin?) InternalCalls.Plugin_FindPluginByName(name);
+            return (Plugin) InternalCalls.Plugin_FindPluginByName(name);
         }
 
         public static bool operator ==(Plugin lhs, Plugin rhs)
@@ -54,19 +52,19 @@ namespace Plugify
             return lhs.Id != rhs.Id;
         }
         
-        public int CompareTo(Plugin? other)
+        public int CompareTo(Plugin other)
         {
             if (ReferenceEquals(this, other)) return 0;
             if (ReferenceEquals(null, other)) return 1;
             return Id.CompareTo(other.Id);
         }
         
-        public bool Equals(Plugin? other)
+        public bool Equals(Plugin other)
         {
             return !ReferenceEquals(other, null) && Id == other.Id;
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj)) return false;
             if (ReferenceEquals(this, obj)) return true;
@@ -89,5 +87,3 @@ namespace Plugify
         }
     }
 }
-
-#nullable disable
