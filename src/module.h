@@ -74,6 +74,9 @@ namespace csharplm {
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
 
+		// TODO: Remove ?
+		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
+
 		template<typename T, typename C>
 		static MonoArray* CreateArrayT(const std::vector<T>& source, C& klass);
 		MonoDelegate* CreateDelegate(void* func, const plugify::Method& method);
@@ -83,7 +86,7 @@ namespace csharplm {
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
-		bool InitMono(const fs::path& monoPath);
+		bool InitMono(const fs::path& monoPath, const fs::path& configPath);
 		void ShutdownMono();
 
 		ScriptOpt CreateScriptInstance(const plugify::IPlugin& plugin, MonoImage* image);
@@ -138,12 +141,12 @@ namespace csharplm {
 
 		ScriptMap _scripts;
 
-		struct MonoConfig {
+		struct MonoSettings {
 			bool enableDebugging{ false };
 			std::string level;
 			std::string mask;
 			std::vector<std::string> options;
-		} _config;
+		} _settings;
 
 		friend class ScriptInstance;
 	};

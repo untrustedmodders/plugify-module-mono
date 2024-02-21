@@ -49,7 +49,7 @@ endif()
 if(WIN32)
 	set(MONO_LIB libmono-static-sgen)
 else()
-	set(MONO_LIB libmonosgen)
+	set(MONO_LIB libmonosgen-2.0)
 endif()
 
 set(MONO_LIBRARY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/lib/${CSHARPLM_PLATFORM})

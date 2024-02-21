@@ -77,35 +77,20 @@ namespace csharplm::utils {
 		return assembly;
 	}
 
-	/*void PrintAssemblyTypes(MonoAssembly* assembly, const std::function<void(std::string)>& out) {
-		MonoImage* image = mono_assembly_get_image(assembly);
-		const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
-		int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
-
-		for (int i = 0; i < numTypes; ++i) {
-			uint32_t cols[MONO_TYPEDEF_SIZE];
-			mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
-
-			const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
-			const char* name = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
-
-			out(std::format("{}.{}", nameSpace, ".", + name));
+	std::string MonoStringToUTF8(MonoString* string) {
+		if (string == nullptr || mono_string_length(string) == 0)
+			return {};
+		MonoError error;
+		char* utf8 = mono_string_to_utf8_checked(string, &error);
+		if (!mono_error_ok(&error)) {
+			g_csharplm.GetProvider()->Log(std::format("[csharplm] Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+			mono_error_cleanup(&error);
+			return {};
 		}
-	}*/
-
-	std::string MonoStringToString(MonoString* string) {
-		char* cStr = mono_string_to_utf8(string);
-		std::string str(cStr);
-		mono_free(cStr);
-		return str;
+		std::string result(utf8);
+		mono_free(utf8);
+		return result;
 	}
-
-	/*std::wstring MonoStringToWString(MonoString* string) {
-		char16_t* cWStr = mono_string_to_utf16(string);
-		std::wstring str(cWStr);
-		mono_free(cWStr);
-		return str;
-	}*/
 
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
@@ -115,15 +100,10 @@ namespace csharplm::utils {
 			MonoObject* element = mono_array_get(array, MonoObject*, i);
 			if constexpr (std::is_same_v<T, std::string>) {
 				if (element != nullptr)
-					dest[i] = MonoStringToString(reinterpret_cast<MonoString*>(element));
+					dest[i] = MonoStringToUTF8(reinterpret_cast<MonoString*>(element));
 				else
 					dest[i] = T{};
-			}/* else if constexpr (std::is_same_v<T, std::wstring>) {
-				if (element != nullptr)
-					dest[i] = MonoStringToWString(reinterpret_cast<MonoString*>(element));
-				else
-					dest[i] = T{};
-			}*/ else {
+			} else {
 				if (element != nullptr)
 					dest[i] = *reinterpret_cast<T*>(mono_object_unbox(element));
 				else
@@ -213,7 +193,7 @@ namespace csharplm::utils {
 		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
 		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
 		if (messageString != nullptr)
-			return MonoStringToString(messageString);
+			return MonoStringToUTF8(messageString);
 		return {};
 	}
 
@@ -221,7 +201,7 @@ namespace csharplm::utils {
 		MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
 		if (klass != nullptr) storage.push_back(klass);
 	}
-	
+
 	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
 		std::vector<std::string_view> output;
 		size_t first = 0;
@@ -250,17 +230,19 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	auto json = utils::ReadText(module.GetBaseDir() / "config.json");
-	auto config = glz::read_json<MonoConfig>(json);
-	if (!config.has_value())
-		return ErrorData{ std::format("MonoConfig: 'config.json' has JSON parsing error: {}", glz::format_error(config.error(), json)) };
-	_config = std::move(*config);
+	auto json = utils::ReadText(module.GetBaseDir() / "settings.json");
+	auto settings = glz::read_json<MonoSettings>(json);
+	if (!settings.has_value())
+		return ErrorData{ std::format("MonoSettings: 'settings.json' has JSON parsing error: {}", glz::format_error(settings.error(), json)) };
+	_settings = std::move(*settings);
 
 	fs::path monoPath(module.GetBaseDir() / "mono/lib");
 	if (!fs::exists(monoPath))
 		return ErrorData{ std::format("Path to mono assemblies not exist '{}'", monoPath.string()) };
 
-	if (!InitMono(monoPath))
+	fs::path configPath(module.GetBaseDir() / "mono/ect/mono/config");
+
+	if (!InitMono(monoPath, configPath))
 		return ErrorData{ "Initialization of mono failed" };
 
 	ScriptGlue::RegisterFunctions();
@@ -272,11 +254,11 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_appDomain = mono_domain_create_appdomain(appName, nullptr);
 	mono_domain_set(_appDomain, true);
 
-	fs::path coreAssemblyPath{ module.GetBaseDir() / "bin/Plugify.dll" };
+	fs::path coreAssemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
 
 	// Load a core assembly
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-	_coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _config.enableDebugging, status);
+	_coreAssembly = utils::LoadMonoAssembly(coreAssemblyPath, _settings.enableDebugging, status);
 	if (!_coreAssembly)
 		return ErrorData{ std::format("Failed to load '{}' core assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status)) };
 
@@ -358,43 +340,46 @@ void CSharpLanguageModule::Shutdown() {
 	return OnMonoAssemblyLoad(mono_assembly_name_get_name(aname));
 }*/
 
-bool CSharpLanguageModule::InitMono(const fs::path& monoPath) {
+bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& configPath) {
 	mono_trace_set_print_handler(OnPrintCallback);
 	mono_trace_set_printerr_handler(OnPrintErrorCallback);
 	mono_trace_set_log_handler(OnLogCallback, nullptr);
 
 	mono_set_assemblies_path(monoPath.string().c_str());
 
-	mono_config_parse(nullptr);
+	mono_config_parse(fs::exists(configPath) ? configPath.string().c_str() : nullptr);
 
 	// Seems we can write custom assembly loader here
 	//mono_install_assembly_preload_hook(OnMonoAssemblyPreloadHook, nullptr);
 
-	if (!_config.options.empty()) {
+	if (!_settings.options.empty()) {
 		std::vector<char*> options;
-		options.reserve(_config.options.size());
-		for (auto& opt : _config.options) {
+		options.reserve(_settings.options.size());
+		for (auto& opt : _settings.options) {
 			if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
-				options.push_back(opt.data());
-				if (opt.starts_with("--debugger"))
+				if (opt.starts_with("--debugger")) {
+					if (!_settings.enableDebugging)
+						continue;
 					_provider->Log(std::format("[csharplm] Mono debugger: {}", opt), Severity::Info);
+				}
+				options.push_back(opt.data());
 			}
 		}
 		mono_jit_parse_options(static_cast<int>(options.size()), options.data());
 	}
 
-	if (!_config.level.empty())
-		mono_trace_set_level_string(_config.level.c_str());
-	if (!_config.mask.empty())
-		mono_trace_set_mask_string(_config.mask.c_str());
-	if (_config.enableDebugging)
+	if (!_settings.level.empty())
+		mono_trace_set_level_string(_settings.level.c_str());
+	if (!_settings.mask.empty())
+		mono_trace_set_mask_string(_settings.mask.c_str());
+	if (_settings.enableDebugging)
 		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
 
 	_rootDomain = mono_jit_init("PlugifyJITRuntime");
 	if (!_rootDomain)
 		return false;
 
-	if (_config.enableDebugging)
+	if (_settings.enableDebugging)
 		mono_debug_domain_create(_rootDomain);
 
 	mono_thread_set_main(mono_thread_current());
@@ -439,7 +424,13 @@ void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, std::vector<void*>
 void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void*>& args) {
 	std::string* dest;
 	if (source != nullptr) {
-		char* cStr = mono_string_to_utf8(source);
+		MonoError error;
+		char* cStr = mono_string_to_utf8_checked(source, &error);
+		if (!mono_error_ok(&error)) {
+			g_csharplm._provider->Log(std::format("[csharplm] Failed to convert MonoString* to UTF-8: '{}'.", mono_error_get_message(&error)), Severity::Debug);
+			mono_error_cleanup(&error);
+			return {};
+		}
 		dest = new std::string(cStr);
 		mono_free(cStr);
 	} else {
@@ -1217,7 +1208,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 						auto source = reinterpret_cast<MonoString*>(args[j]);
 						if (source != nullptr)  {
 							auto dest = p->GetArgument<std::string*>(i);
-							*dest = utils::MonoStringToString(source);
+							*dest = utils::MonoStringToUTF8(source);
 						}
 						break;
 					}
@@ -1432,7 +1423,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			case ValueType::String: {
 				auto source = reinterpret_cast<MonoString*>(result);
 				auto dest = p->GetArgument<std::string*>(0);
-				*dest = utils::MonoStringToString(source);
+				*dest = utils::MonoStringToUTF8(source);
 				break;
 			}
 			case ValueType::ArrayBool: {
@@ -1678,7 +1669,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 						auto source = reinterpret_cast<MonoString*>(args[j]);
 						if (source != nullptr)  {
 							auto dest = p->GetArgument<std::string*>(i);
-							*dest = utils::MonoStringToString(source);
+							*dest = utils::MonoStringToUTF8(source);
 						}
 						break;
 					}
@@ -1893,7 +1884,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 			case ValueType::String: {
 				auto source = reinterpret_cast<MonoString*>(result);
 				auto dest = p->GetArgument<std::string*>(0);
-				*dest = utils::MonoStringToString(source);
+				*dest = utils::MonoStringToUTF8(source);
 				break;
 			}
 			case ValueType::ArrayBool: {
@@ -2001,7 +1992,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 
 LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint, _config.enableDebugging, status);
+	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint, _settings.enableDebugging, status);
 	if (!assembly)
 		return ErrorData{ std::format("Failed to load assembly: '{}'",mono_image_strerror(status)) };
 
