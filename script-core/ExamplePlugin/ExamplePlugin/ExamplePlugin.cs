@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
 using Plugify;
 
 namespace example_plugin
@@ -8,11 +7,11 @@ namespace example_plugin
     {
         public delegate void MyFunc(int a, string c);
 		
-        [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        internal static extern void MakePrint(int i, string c);
+       // [MethodImplAttribute(MethodImplOptions.InternalCall)]
+        ////internal static extern void MakePrint(int i, string c);
 		
-        [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        internal static extern void ReceiveFuncDelegate(MyFunc f);
+       // [MethodImplAttribute(MethodImplOptions.InternalCall)]
+        //internal static extern void ReceiveFuncDelegate(MyFunc f);
     }
 }
 
@@ -26,9 +25,20 @@ namespace ExamplePlugin
 		 */
         void OnStart()
         {
+            int i = 0;
+            int b = 2;
+            int c = i + b;
+
+            string S = "name";
+
+            S += c;
+
+            string ddc = S;
+
             Console.Write($"{Name}: OnStart\n");
+            Console.Write(S + "\n");
             //example_plugin.example_plugin.MakePrint(3);
-            example_plugin.example_plugin.ReceiveFuncDelegate(MyExportFunction);
+            //example_plugin.example_plugin.ReceiveFuncDelegate(MyExportFunction);
             //example_plugin.example_plugin.ReceiveFuncDelegate(MakePrint);
         }
 
@@ -37,14 +47,14 @@ namespace ExamplePlugin
 		 */
         void OnEnd()
         {
-            Console.Write($"{Name}: OnEnd\n");
+            //Console.Write($"{Name}: OnEnd\n");
         }
 
         void MyExportFunction(int a, string c)
         {
-            Console.Write($"{Name}: OnEnd\n");
-            Console.Write("I believe that what doesn't kill you makes you... stranger!!! \n");
-            Console.Write($"{a}, {c}");
+            //Console.Write($"{Name}: OnEnd\n");
+            //Console.Write("I believe that what doesn't kill you makes you... stranger!!! \n");
+           // Console.Write($"{a}, {c}");
         }
     }
 }

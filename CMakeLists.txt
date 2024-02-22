@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
 
 if(POLICY CMP0092)
-    cmake_policy(SET CMP0092 NEW) # Don't add -W3 warning level by default.
+	cmake_policy(SET CMP0092 NEW) # Don't add -W3 warning level by default.
 endif()
 
 
@@ -39,33 +39,39 @@ add_subdirectory(external/dyncall)
 # Mono
 #
 if(WIN32)
-    set(CSHARPLM_PLATFORM "windows")
+	set(CSHARPLM_PLATFORM "windows")
 elseif(APPLE)
-    set(CSHARPLM_PLATFORM "apple")
+	set(CSHARPLM_PLATFORM "apple")
 elseif(UNIX)
-    set(CSHARPLM_PLATFORM "linux")
+	set(CSHARPLM_PLATFORM "linux")
 endif()
 
 if(WIN32)
 	set(MONO_LIB libmono-static-sgen)
 else()
 	set(MONO_LIB libmonosgen-2.0)
+	set(MONO_NATIVE_LIB libmono-native)
 endif()
 
 set(MONO_LIBRARY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/lib/${CSHARPLM_PLATFORM})
 
 if(WIN32)
-    add_library(${MONO_LIB} STATIC IMPORTED)
-    set_target_properties(${MONO_LIB} PROPERTIES
-            IMPORTED_LOCATION_DEBUG "${MONO_LIBRARY_PATH}/Debug/${MONO_LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}"
-            IMPORTED_LOCATION_RELEASE "${MONO_LIBRARY_PATH}/Release/${MONO_LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+	add_library(${MONO_LIB} STATIC IMPORTED)
+	set_target_properties(${MONO_LIB} PROPERTIES
+			IMPORTED_LOCATION_DEBUG "${MONO_LIBRARY_PATH}/Debug/${MONO_LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+			IMPORTED_LOCATION_RELEASE "${MONO_LIBRARY_PATH}/Release/${MONO_LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}"
 	)
 	set(MONO_LIB ${MONO_LIB} ws2_32.lib winmm.lib version.lib bcrypt.lib)
 else()
-	add_library(${MONO_LIB} STATIC IMPORTED GLOBAL)
+	add_library(${MONO_LIB} STATIC IMPORTED)
 	set_target_properties(${MONO_LIB} PROPERTIES
 			IMPORTED_LOCATION "${MONO_LIBRARY_PATH}/${MONO_LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}"
 	)
+	add_library(${MONO_NATIVE_LIB} STATIC IMPORTED)
+	set_target_properties(${MONO_NATIVE_LIB} PROPERTIES
+			IMPORTED_LOCATION "${MONO_LIBRARY_PATH}/${MONO_NATIVE_LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+	)
+	set(MONO_LIB -Wl,--whole-archive ${MONO_NATIVE_LIB} -Wl,--no-whole-archive ${MONO_LIB})
 endif()
 
 #
@@ -89,11 +95,17 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIB} ${CSHARPLM_LINK_LIBRAR
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
 
 if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
+	target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
 else()
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wconversion -Werror) # -Wshadow -Wpedantic 
+	target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wconversion -Werror) # -Wshadow -Wpedantic
 endif()
 
 include(GenerateExportHeader)
 generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
+
+if(UNIX)
+	set(CSHARPLM_PLATFORM "unix")
+endif()
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE CSHARPLM_PLATFORM="${CSHARPLM_PLATFORM}")

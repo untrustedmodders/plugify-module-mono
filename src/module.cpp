@@ -236,11 +236,11 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		return ErrorData{ std::format("MonoSettings: 'settings.json' has JSON parsing error: {}", glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
-	fs::path monoPath(module.GetBaseDir() / "mono/lib");
+	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM);
 	if (!fs::exists(monoPath))
 		return ErrorData{ std::format("Path to mono assemblies not exist '{}'", monoPath.string()) };
 
-	fs::path configPath(module.GetBaseDir() / "mono/ect/mono/config");
+	fs::path configPath(module.GetBaseDir() / "config");
 
 	if (!InitMono(monoPath, configPath))
 		return ErrorData{ "Initialization of mono failed" };
@@ -276,6 +276,8 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_pluginCtor = mono_class_get_method_from_name(_pluginClass, ".ctor", 8);
 	if (!_pluginCtor)
 		return ErrorData{ std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string()) };
+
+	//
 
 	utils::CacheClass(_funcClasses, "Func`1");
 	utils::CacheClass(_funcClasses, "Func`2");
@@ -322,6 +324,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 void CSharpLanguageModule::Shutdown() {
 	mono_gc_reference_queue_free(_functionReferenceQueue);
+	_functionReferenceQueue = nullptr;
 
 	_funcClasses.clear();
 	_actionClasses.clear();
@@ -347,19 +350,15 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 
 	mono_set_assemblies_path(monoPath.string().c_str());
 
-	mono_config_parse(fs::exists(configPath) ? configPath.string().c_str() : nullptr);
-
 	// Seems we can write custom assembly loader here
 	//mono_install_assembly_preload_hook(OnMonoAssemblyPreloadHook, nullptr);
 
-	if (!_settings.options.empty()) {
+	if (_settings.enableDebugging && !_settings.options.empty()) {
 		std::vector<char*> options;
 		options.reserve(_settings.options.size());
-		for (auto& opt : _settings.options) {
+		for (auto& opt: _settings.options) {
 			if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
 				if (opt.starts_with("--debugger")) {
-					if (!_settings.enableDebugging)
-						continue;
 					_provider->Log(std::format("[csharplm] Mono debugger: {}", opt), Severity::Info);
 				}
 				options.push_back(opt.data());
@@ -372,15 +371,17 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 		mono_trace_set_level_string(_settings.level.c_str());
 	if (!_settings.mask.empty())
 		mono_trace_set_mask_string(_settings.mask.c_str());
-	if (_settings.enableDebugging)
-		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
+
+	mono_config_parse(fs::exists(configPath) ? configPath.string().c_str() : nullptr);
 
 	_rootDomain = mono_jit_init("PlugifyJITRuntime");
 	if (!_rootDomain)
 		return false;
 
-	if (_settings.enableDebugging)
+	if (_settings.enableDebugging) {
 		mono_debug_domain_create(_rootDomain);
+		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
+	}
 
 	mono_thread_set_main(mono_thread_current());
 
