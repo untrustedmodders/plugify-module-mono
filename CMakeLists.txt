@@ -104,8 +104,4 @@ include(GenerateExportHeader)
 generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
 
-if(UNIX)
-	set(CSHARPLM_PLATFORM "unix")
-endif()
-
 target_compile_definitions(${PROJECT_NAME} PRIVATE CSHARPLM_PLATFORM="${CSHARPLM_PLATFORM}")
