@@ -1,4 +1,4 @@
-#include "script_glue.h"
+#include "glue.h"
 #include "module.h"
 
 #include <mono/metadata/object.h>
