@@ -2037,10 +2037,73 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		MonoObject* monoInstance = monoClass == script._klass ? script._instance : nullptr;
 
-		void* methodAddr = ValidateMethod(method, methodErrors, monoInstance, monoMethod, nameSpace.c_str(), className.c_str(), methodName.c_str());
-		if (methodAddr) {
-			methods.emplace_back(method.name, methodAddr);
+		uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
+		if (!(methodFlags & MONO_METHOD_ATTR_STATIC) && !monoInstance) {
+			methodErrors.emplace_back(std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName));
+			continue;
 		}
+
+		MonoMethodSignature* sig = mono_method_signature(monoMethod);
+
+		uint32_t paramCount = mono_signature_get_param_count(sig);
+		if (paramCount != method.paramTypes.size()) {
+			methodErrors.emplace_back(std::format("Invalid parameter count {} when it should have {}", method.paramTypes.size(), paramCount));
+			continue;
+		}
+
+		char* returnTypeName = mono_type_get_name(mono_signature_get_return_type(sig));
+		ValueType returnType = utils::MonoTypeToValueType(returnTypeName);
+		if (returnType == ValueType::Invalid) {
+			methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
+			continue;
+		}
+
+		if (method.retType.type == ValueType::Function && returnType == ValueType::Ptr64) {
+			returnType = ValueType::Function; // special case
+		}
+
+		if (returnType != method.retType.type) {
+			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType.type), ValueTypeToString(returnType)));
+			continue;
+		}
+
+		bool methodFail = false;
+
+		size_t i = 0;
+		void* iter = nullptr;
+		while (MonoType* type = mono_signature_get_params(sig, &iter)) {
+			char* paramTypeName = mono_type_get_name(type);
+			ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
+			if (paramType == ValueType::Invalid) {
+				methodFail = true;
+				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
+				continue;
+			}
+
+			if (paramType != method.paramTypes[i].type) {
+				methodFail = true;
+				methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i].type), i, ValueTypeToString(paramType)));
+				continue;
+			}
+
+			i++;
+		}
+
+		if (methodFail)
+			continue;
+
+		auto exportMethod = std::make_unique<ExportMethod>(monoMethod, monoInstance);
+
+		Function function(_rt);
+		void* methodAddr = function.GetJitFunc(method, &InternalCall, exportMethod.get());
+		if (!methodAddr) {
+			methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
+			continue;
+		}
+		_functions.emplace(exportMethod.get(), std::move(function));
+		_exportMethods.emplace_back(std::move(exportMethod));
+
+		methods.emplace_back(method.name, methodAddr);
 	}
 
 	if (!methodErrors.empty()) {
@@ -2130,70 +2193,6 @@ ScriptOpt CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin, Mono
 
 	return std::nullopt;
 }
-
-void* CSharpLanguageModule::ValidateMethod(const plugify::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName) {
-	uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
-	if (!(methodFlags & MONO_METHOD_ATTR_STATIC) && !monoInstance) {
-		methodErrors.emplace_back(std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName));
-		return nullptr;
-	}
-
-	MonoMethodSignature* sig = mono_method_signature(monoMethod);
-
-	uint32_t paramCount = mono_signature_get_param_count(sig);
-	if (paramCount != method.paramTypes.size()) {
-		methodErrors.emplace_back(std::format("Invalid parameter count {} when it should have {}", method.paramTypes.size(), paramCount));
-		return nullptr;
-	}
-
-	char* returnTypeName = mono_type_get_name(mono_signature_get_return_type(sig));
-	ValueType returnType = utils::MonoTypeToValueType(returnTypeName);
-	if (returnType == ValueType::Invalid) {
-		methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
-		return nullptr;
-	}
-
-	if (method.retType.type == ValueType::Function && returnType == ValueType::Ptr64) {
-		returnType = ValueType::Function; // special case
-	}
-
-	if (returnType != method.retType.type) {
-		methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType.type), ValueTypeToString(returnType)));
-		return nullptr;
-	}
-
-	size_t i = 0;
-	void* iter = nullptr;
-	while (MonoType* type = mono_signature_get_params(sig, &iter)) {
-		char* paramTypeName = mono_type_get_name(type);
-		ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
-		if (paramType == ValueType::Invalid) {
-			methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
-			continue;
-		}
-
-		if (paramType != method.paramTypes[i].type) {
-			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.paramTypes[i].type), i, ValueTypeToString(paramType)));
-			continue;
-		}
-
-		i++;
-	}
-
-	if (!methodErrors.empty())
-		return nullptr;
-
-	auto& exportMethod = _exportMethods.emplace_back(std::make_unique<ExportMethod>(monoMethod, monoInstance));
-
-	Function function(_rt);
-	void* methodAddr = function.GetJitFunc(method, &InternalCall, exportMethod.get());
-	if (!methodAddr) {
-		methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
-		return nullptr;
-	}
-	_functions.emplace(exportMethod.get(), std::move(function));
-	return methodAddr;
-};
 
 ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 	auto it = _scripts.find(name);

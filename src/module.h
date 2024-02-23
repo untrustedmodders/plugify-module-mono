@@ -90,8 +90,7 @@ namespace csharplm {
 		void ShutdownMono();
 
 		ScriptOpt CreateScriptInstance(const plugify::IPlugin& plugin, MonoImage* image);
-		void* ValidateMethod(const plugify::Method& method, std::vector<std::string>& methodErrors, MonoObject* monoInstance, MonoMethod* monoMethod, const char* nameSpace, const char* className, const char* methodName);
-		
+
 	private:
 		static void HandleException(MonoObject* exc, void* userData);
 		static void OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* userData);
