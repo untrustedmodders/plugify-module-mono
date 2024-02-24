@@ -72,13 +72,13 @@ class ParamGen(Enum):
 def gen_params_string(params, param_gen: ParamGen):
     def gen_param(param):
         if param_gen == ParamGen.Types:
-            type = convert_type(param['type'], )
+            type = convert_type(param['type'], 'ref' in param)
             if 'delegate' in type and 'prototype' in param:
                 type = param['prototype']['name']
             return type
         if param_gen == ParamGen.Names:
             return param['name']
-        type = convert_type(param['type'])
+        type = convert_type(param['type'], 'ref' in param)
         if 'delegate' in type and 'prototype' in param:
             type = param['prototype']['name']
         return f'{type} {param["name"]}'
@@ -90,6 +90,12 @@ def gen_params_string(params, param_gen: ParamGen):
         for p in it:
             output_string += f', {gen_param(p)}'
     return output_string
+
+
+def gen_delegate(prototype):
+    return_type = convert_type(prototype['retType']['type'], 'ref' in prototype['retType'])
+    return (f'\tdelegate {return_type} '
+            f'{prototype["name"]}({gen_params_string(prototype["paramTypes"], ParamGen.TypesNames)});\n')
 
 
 def main(manifest_path, output_dir, override):
@@ -130,16 +136,10 @@ def main(manifest_path, output_dir, override):
     for method in pplugin['exportedMethods']:
         ret_type = method['retType']
         if "prototype" in ret_type:
-            prototype = ret_type['prototype']
-            return_type = convert_type(prototype['retType']['type'], 'ref' in prototype['retType'])
-            content += (f'\tdelegate {return_type} '
-                        f'{prototype["name"]}({gen_params_string(prototype["paramTypes"], ParamGen.TypesNames)});\n')
+            content += gen_delegate(ret_type['prototype'])
         for attribute in method['paramTypes']:
             if "prototype" in attribute:
-                prototype = attribute['prototype']
-                return_type = convert_type(prototype['retType']['type'], 'ref' in prototype['retType'])
-                content += (f'\tinternal delegate {return_type} '
-                            f'{prototype["name"]}({gen_params_string(prototype["paramTypes"], ParamGen.TypesNames)});\n')
+                content += gen_delegate(attribute['prototype'])
 
     content += f'\n\tpublic static class {plugin_name}\n\t{{'
     content += '\n'
