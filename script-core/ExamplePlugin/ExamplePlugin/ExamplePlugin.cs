@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using Plugify;
 
 namespace example_plugin
@@ -37,6 +38,11 @@ namespace ExamplePlugin
 
             Console.Write($"{Name}: OnStart\n");
             Console.Write(S + "\n");
+            
+            
+            string[] lines = {"some text1", "some text2", "some text3"};
+            File.WriteAllLines(@"someText.txt", lines);
+            
             //example_plugin.example_plugin.MakePrint(3);
             //example_plugin.example_plugin.ReceiveFuncDelegate(MyExportFunction);
             //example_plugin.example_plugin.ReceiveFuncDelegate(MakePrint);
