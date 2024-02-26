@@ -1,5 +1,5 @@
 #include "module.h"
-#include "script_glue.h"
+#include "glue.h"
 
 #include <mono/jit/jit.h>
 #include <mono/utils/mono-logger.h>
@@ -197,7 +197,7 @@ namespace csharplm::utils {
 		return {};
 	}
 
-	void CacheClass(std::vector<MonoClass*>& storage, const char* name) {
+	void CacheCoreClass(std::vector<MonoClass*>& storage, const char* name) {
 		MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
 		if (klass != nullptr) storage.push_back(klass);
 	}
@@ -245,7 +245,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!InitMono(monoPath, configPath))
 		return ErrorData{ "Initialization of mono failed" };
 
-	ScriptGlue::RegisterFunctions();
+	Glue::RegisterFunctions();
 
 	_rt = std::make_shared<asmjit::JitRuntime>();
 
@@ -277,45 +277,46 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!_pluginCtor)
 		return ErrorData{ std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string()) };
 
-	//
+	/// Delegates
+	utils::CacheCoreClass(_funcClasses, "Func`1");
+	utils::CacheCoreClass(_funcClasses, "Func`2");
+	utils::CacheCoreClass(_funcClasses, "Func`3");
+	utils::CacheCoreClass(_funcClasses, "Func`4");
+	utils::CacheCoreClass(_funcClasses, "Func`5");
+	utils::CacheCoreClass(_funcClasses, "Func`6");
+	utils::CacheCoreClass(_funcClasses, "Func`7");
+	utils::CacheCoreClass(_funcClasses, "Func`8");
+	utils::CacheCoreClass(_funcClasses, "Func`9");
+	utils::CacheCoreClass(_funcClasses, "Func`10");
+	utils::CacheCoreClass(_funcClasses, "Func`11");
+	utils::CacheCoreClass(_funcClasses, "Func`12");
+	utils::CacheCoreClass(_funcClasses, "Func`13");
+	utils::CacheCoreClass(_funcClasses, "Func`14");
+	utils::CacheCoreClass(_funcClasses, "Func`15");
+	utils::CacheCoreClass(_funcClasses, "Func`16");
+	utils::CacheCoreClass(_funcClasses, "Func`17");
 
-	utils::CacheClass(_funcClasses, "Func`1");
-	utils::CacheClass(_funcClasses, "Func`2");
-	utils::CacheClass(_funcClasses, "Func`3");
-	utils::CacheClass(_funcClasses, "Func`4");
-	utils::CacheClass(_funcClasses, "Func`5");
-	utils::CacheClass(_funcClasses, "Func`6");
-	utils::CacheClass(_funcClasses, "Func`7");
-	utils::CacheClass(_funcClasses, "Func`8");
-	utils::CacheClass(_funcClasses, "Func`9");
-	utils::CacheClass(_funcClasses, "Func`10");
-	utils::CacheClass(_funcClasses, "Func`11");
-	utils::CacheClass(_funcClasses, "Func`12");
-	utils::CacheClass(_funcClasses, "Func`13");
-	utils::CacheClass(_funcClasses, "Func`14");
-	utils::CacheClass(_funcClasses, "Func`15");
-	utils::CacheClass(_funcClasses, "Func`16");
-	utils::CacheClass(_funcClasses, "Func`17");
-
-	utils::CacheClass(_actionClasses, "Action");
-	utils::CacheClass(_actionClasses, "Action`1");
-	utils::CacheClass(_actionClasses, "Action`2");
-	utils::CacheClass(_actionClasses, "Action`3");
-	utils::CacheClass(_actionClasses, "Action`4");
-	utils::CacheClass(_actionClasses, "Action`5");
-	utils::CacheClass(_actionClasses, "Action`6");
-	utils::CacheClass(_actionClasses, "Action`7");
-	utils::CacheClass(_actionClasses, "Action`8");
-	utils::CacheClass(_actionClasses, "Action`9");
-	utils::CacheClass(_actionClasses, "Action`10");
-	utils::CacheClass(_actionClasses, "Action`11");
-	utils::CacheClass(_actionClasses, "Action`12");
-	utils::CacheClass(_actionClasses, "Action`13");
-	utils::CacheClass(_actionClasses, "Action`14");
-	utils::CacheClass(_actionClasses, "Action`15");
-	utils::CacheClass(_actionClasses, "Action`16");
+	utils::CacheCoreClass(_actionClasses, "Action");
+	utils::CacheCoreClass(_actionClasses, "Action`1");
+	utils::CacheCoreClass(_actionClasses, "Action`2");
+	utils::CacheCoreClass(_actionClasses, "Action`3");
+	utils::CacheCoreClass(_actionClasses, "Action`4");
+	utils::CacheCoreClass(_actionClasses, "Action`5");
+	utils::CacheCoreClass(_actionClasses, "Action`6");
+	utils::CacheCoreClass(_actionClasses, "Action`7");
+	utils::CacheCoreClass(_actionClasses, "Action`8");
+	utils::CacheCoreClass(_actionClasses, "Action`9");
+	utils::CacheCoreClass(_actionClasses, "Action`10");
+	utils::CacheCoreClass(_actionClasses, "Action`11");
+	utils::CacheCoreClass(_actionClasses, "Action`12");
+	utils::CacheCoreClass(_actionClasses, "Action`13");
+	utils::CacheCoreClass(_actionClasses, "Action`14");
+	utils::CacheCoreClass(_actionClasses, "Action`15");
+	utils::CacheCoreClass(_actionClasses, "Action`16");
 
 	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
+
+	_lastCleanupTime = DateTime::Now();
 
 	_provider->Log("[csharplm] Inited!", Severity::Debug);
 
@@ -326,6 +327,7 @@ void CSharpLanguageModule::Shutdown() {
 	mono_gc_reference_queue_free(_functionReferenceQueue);
 	_functionReferenceQueue = nullptr;
 
+	_cachedDelegates.clear();
 	_funcClasses.clear();
 	_actionClasses.clear();
 	_importMethods.clear();
@@ -441,9 +443,9 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void
 	return dest;
 }
 
-void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) const {
+void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) {
 	if (source == nullptr) {
-		//_provider->Log("[csharplm] Delegate is null", Severity::Warning);
+		_provider->Log("[csharplm] Delegate is null", Severity::Warning);
 		return nullptr;
 	}
 
@@ -460,13 +462,41 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 		}
 	}
 
+	CleanupDelegateCache();
+
+	uint32_t ref = mono_gchandle_new_weakref(reinterpret_cast<MonoObject*>(source), 0);
+
+	auto it = _cachedDelegates.find(ref);
+	if (it != _cachedDelegates.end()) {
+		return std::get<void*>(*it);
+	}
+	
+	void* methodAddr;
+		
 	if (method.IsPrimitive()) {
-		return mono_delegate_to_ftnptr(source);
+		methodAddr = mono_delegate_to_ftnptr(source);
 	} else {
 		auto function = new plugify::Function(_rt);
-		void* methodAddr = function->GetJitFunc(method, &DelegateCall, source);
+		methodAddr = function->GetJitFunc(method, &DelegateCall, source);
 		mono_gc_reference_queue_add(_functionReferenceQueue, reinterpret_cast<MonoObject*>(source), reinterpret_cast<void*>(function));
-		return methodAddr;
+	}
+	
+	_cachedDelegates.emplace(ref, methodAddr);
+
+	return methodAddr;
+}
+
+void CSharpLanguageModule::CleanupDelegateCache() {
+	auto currentTime = DateTime::Now();
+	if (currentTime > _lastCleanupTime + 60s) {
+		for (auto it = _cachedDelegates.begin(); it != _cachedDelegates.end();) {
+			if (mono_gchandle_get_target(it->first) == nullptr) {
+				it = _cachedDelegates.erase(it);
+			} else {
+				++it;
+			}
+		}
+		_lastCleanupTime = currentTime;
 	}
 }
 
@@ -1418,7 +1448,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			}
 			case ValueType::Function: {
 				auto source = reinterpret_cast<MonoDelegate*>(result);
-				ret->SetReturnPtr<void*>(mono_delegate_to_ftnptr(source));
+				ret->SetReturnPtr<void*>(g_csharplm.MonoDelegateToArg(source, *(method->retType.prototype)));
 				break;
 			}
 			case ValueType::String: {
@@ -1879,7 +1909,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 			}
 			case ValueType::Function: {
 				auto source = reinterpret_cast<MonoDelegate*>(result);
-				ret->SetReturnPtr<void*>(mono_delegate_to_ftnptr(source));
+				ret->SetReturnPtr<void*>(g_csharplm.MonoDelegateToArg(source, *(method->retType.prototype)));
 				break;
 			}
 			case ValueType::String: {
@@ -2196,6 +2226,13 @@ ScriptOpt CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin, Mono
 
 ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 	auto it = _scripts.find(name);
+	if (it != _scripts.end())
+		return std::get<ScriptInstance>(*it);
+	return std::nullopt;
+}
+
+ScriptOpt CSharpLanguageModule::FindScript(MonoString* name) {
+	auto it = _scripts.find(utils::MonoStringToUTF8(name));
 	if (it != _scripts.end())
 		return std::get<ScriptInstance>(*it);
 	return std::nullopt;

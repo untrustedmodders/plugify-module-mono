@@ -1,5 +1,6 @@
 #pragma once
 
+#include "date_time.h"
 #include <module_export.h>
 #include <plugify/language_module.h>
 #include <plugify/function.h>
@@ -73,8 +74,8 @@ namespace csharplm {
 
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
+		ScriptOpt FindScript(MonoString* name);
 
-		// TODO: Remove ?
 		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
 
 		template<typename T, typename C>
@@ -104,7 +105,9 @@ namespace csharplm {
 		template<typename T>
 		static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
 		static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
-		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) const;
+		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method);
+
+		void CleanupDelegateCache();
 
 	private:
 		MonoDomain* _rootDomain{ nullptr };
@@ -134,6 +137,9 @@ namespace csharplm {
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::unordered_map<void*, plugify::Function> _functions;
+
+		std::unordered_map<uint32_t, void*> _cachedDelegates;
+		DateTime _lastCleanupTime;
 
 		std::vector<MonoClass*> _funcClasses;
 		std::vector<MonoClass*> _actionClasses;
