@@ -3,7 +3,7 @@
         GetLanguageModule;
         mono_*;
         SystemNative_*;
-        ves_icall_*
+        ves_icall_*;
         
     local:
         extern "C++" {
