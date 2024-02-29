@@ -6,7 +6,4 @@
         ves_icall_*;
         
     local:
-        extern "C++" {
-            std::*;
-        };
 };
