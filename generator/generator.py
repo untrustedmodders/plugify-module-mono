@@ -40,6 +40,130 @@ TYPES_MAP = {
     'string*': 'string[]'
 }
 
+INVALID_NAMES = {
+    "abstract",
+    "as",
+    "base",
+    "bool",
+    "break",
+    "byte",
+    "case",
+    "catch",
+    "char",
+    "checked",
+    "class",
+    "const",
+    "continue",
+    "decimal",
+    "default",
+    "delegate",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "event",
+    "explicit",
+    "extern",
+    "false",
+    "finally",
+    "fixed",
+    "float",
+    "for",
+    "foreach",
+    "goto",
+    "if",
+    "implicit",
+    "in",
+    "int",
+    "interface",
+    "internal",
+    "is",
+    "lock",
+    "long",
+    "namespace",
+    "new",
+    "null",
+    "object",
+    "operator",
+    "out",
+    "override",
+    "params",
+    "private",
+    "protected",
+    "public",
+    "readonly",
+    "ref",
+    "return",
+    "sbyte",
+    "sealed",
+    "short",
+    "sizeof",
+    "stackalloc",
+    "static",
+    "string",
+    "struct",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "uint",
+    "ulong",
+    "unchecked",
+    "unsafe",
+    "ushort",
+    "using",
+    "virtual",
+    "void",
+    "volatile",
+    "while"
+    #"add",
+    #"and",
+    #"alias",
+    #"ascending",
+    #"args",
+    #"async",
+    #"await",
+    #"by",
+    #"descending",
+    #"dynamic",
+    #"equals",
+    #"file",
+    #"from",
+    #"get",
+    #"global",
+    #"group",
+    #"init",
+    #"into",
+    #"join",
+    #"let",
+    #"managed",
+    #"nameof",
+    #"nint",
+    #"not",
+    #"notnull",
+    #"nuint",
+    #"on",
+    #"or",
+    #"orderby",
+    #"partial",
+    #"partial",
+    #"record",
+    #"remove",
+    #"required",
+    #"scoped",
+    #"select",
+    #"set",
+    #"unmanaged",
+    #"value",
+    #"var",
+    #"when",
+    #"where",
+    #"where",
+    #"with",
+    #"yield"
+}
 
 def validate_manifest(pplugin):
     parse_errors = []
@@ -63,6 +187,13 @@ def convert_type(type_name, is_ref=False):
         return TYPES_MAP.get(type_name, 'int')
 
 
+def generate_name(name):
+    if name in INVALID_NAMES:
+        return name + '_'
+    else:
+        return name
+
+
 class ParamGen(Enum):
     Types = 1
     Names = 2
@@ -72,16 +203,16 @@ class ParamGen(Enum):
 def gen_params_string(params, param_gen: ParamGen):
     def gen_param(param):
         if param_gen == ParamGen.Types:
-            type = convert_type(param['type'], 'ref' in param)
+            type = convert_type(param['type'], 'ref' in param and param['ref'] is True)
             if 'delegate' in type and 'prototype' in param:
-                type = param['prototype']['name']
+                type = generate_name(param['prototype']['name'])
             return type
         if param_gen == ParamGen.Names:
-            return param['name']
-        type = convert_type(param['type'], 'ref' in param)
+            return generate_name(param['name'])
+        type = convert_type(param['type'], 'ref' in param and param['ref'] is True)
         if 'delegate' in type and 'prototype' in param:
-            type = param['prototype']['name']
-        return f'{type} {param["name"]}'
+            type = generate_name(param['prototype']['name'])
+        return f'{type} {generate_name(param["name"])}'
 
     output_string = ''
     if params:
@@ -93,7 +224,8 @@ def gen_params_string(params, param_gen: ParamGen):
 
 
 def gen_delegate(prototype):
-    return_type = convert_type(prototype['retType']['type'], 'ref' in prototype['retType'])
+    ret_type = prototype['retType']
+    return_type = convert_type(ret_type['type'], 'ref' in ret_type and ret_type['ref'] is True)
     return (f'\tdelegate {return_type} '
             f'{prototype["name"]}({gen_params_string(prototype["paramTypes"], ParamGen.TypesNames)});\n')
 
@@ -146,7 +278,7 @@ def main(manifest_path, output_dir, override):
     for method in pplugin['exportedMethods']:
         content += "\t\t[MethodImplAttribute(MethodImplOptions.InternalCall)]\n"
         ret_type = method['retType']
-        return_type = convert_type(ret_type['type'], 'ref' in ret_type)
+        return_type = convert_type(ret_type['type'], 'ref' in ret_type and ret_type['ref'] is True)
         content += (f'\t\tinternal static extern {return_type} '
                     f'{method["name"]}({gen_params_string(method["paramTypes"], ParamGen.TypesNames)});\n')
     content += '\t}\n'
