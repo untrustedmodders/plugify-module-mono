@@ -1,0 +1,4 @@
+GetLanguageModule
+mono_*
+SystemNative_*
+ves_icall_
