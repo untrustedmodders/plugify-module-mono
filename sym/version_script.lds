@@ -5,5 +5,5 @@
         SystemNative_*;
         ves_icall_*;
         
-    local:
+    local: *;
 };
