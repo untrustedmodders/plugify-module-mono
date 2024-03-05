@@ -1,6 +1,5 @@
 #pragma once
 
-#include "date_time.h"
 #include <module_export.h>
 #include <plugify/language_module.h>
 #include <plugify/function.h>
@@ -47,6 +46,7 @@ namespace csharplm {
 		MonoImage* _image{ nullptr };
 		MonoClass* _klass{ nullptr };
 		MonoObject* _instance{ nullptr };
+		
 		MonoMethod* _onStartMethod{ nullptr };
 		MonoMethod* _onEndMethod{ nullptr };
 
@@ -58,6 +58,16 @@ namespace csharplm {
 	using PluginRef = std::reference_wrapper<const plugify::IPlugin>;
 	using MethodRef = std::reference_wrapper<const plugify::Method>;
 	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
+
+	struct AssemblyInfo {
+		MonoAssembly* assembly{ nullptr };
+		MonoImage* image{ nullptr };
+	};
+
+	struct ClassInfo {
+		MonoClass* klass{ nullptr };
+		MonoMethod* ctor{ nullptr };
+	};
 
 	class CSharpLanguageModule final : public plugify::ILanguageModule {
 	public:
@@ -78,8 +88,10 @@ namespace csharplm {
 
 		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
 
-		template<typename T, typename C>
-		static MonoArray* CreateArrayT(const std::vector<T>& source, C& klass);
+		template<typename T>
+		MonoArray* CreateArrayT(const std::vector<T>& source, MonoClass* klass);
+		template<typename T>
+		MonoObject* CreateObject(T& source, const ClassInfo& info);
 		MonoDelegate* CreateDelegate(void* func, const plugify::Method& method);
 		MonoString* CreateString(const std::string& source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
@@ -103,6 +115,8 @@ namespace csharplm {
 		static void DelegateCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
 		template<typename T>
+		static void* MonoStructToArg(std::vector<void*>& args);
+		template<typename T>
 		static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
 		static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
 		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method);
@@ -110,36 +124,38 @@ namespace csharplm {
 		void CleanupDelegateCache();
 
 	private:
-		MonoDomain* _rootDomain{ nullptr };
-		MonoDomain* _appDomain{ nullptr };
-
-		MonoAssembly* _coreAssembly{ nullptr };
-		MonoImage* _coreImage{ nullptr };
-
-		MonoClass* _pluginClass{ nullptr };
-		MonoMethod* _pluginCtor{ nullptr };
-
-		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
-
-		struct ImportMethod {
+		/*struct ImportMethod {
 			MethodRef method;
 			void* addr{ nullptr };
-		};
+		};*/
 
 		struct ExportMethod {
 			MonoMethod* method{ nullptr };
 			MonoObject* instance{ nullptr };
 		};
 
+	private:
+		MonoDomain* _rootDomain{ nullptr };
+		MonoDomain* _appDomain{ nullptr };
+		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
+
+		AssemblyInfo _core;
+		AssemblyInfo _numerics;
+
+		ClassInfo _plugin;
+		ClassInfo _vector2;
+		ClassInfo _vector3;
+		ClassInfo _vector4;
+		ClassInfo _matrix4x4;
+		ClassInfo _matrix3x2;
+
 		std::shared_ptr<asmjit::JitRuntime> _rt;
 		std::shared_ptr<plugify::IPlugifyProvider> _provider;
-		std::unordered_map<std::string, ImportMethod> _importMethods;
+		std::set<std::string/*, ImportMethod*/> _importMethods;
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::unordered_map<void*, plugify::Function> _functions;
-
-		std::unordered_map<uint32_t, void*> _cachedDelegates;
-		DateTime _lastCleanupTime;
+		std::map<uint32_t, void*> _cachedDelegates;
 
 		std::vector<MonoClass*> _funcClasses;
 		std::vector<MonoClass*> _actionClasses;

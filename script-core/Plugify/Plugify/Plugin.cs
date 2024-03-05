@@ -2,9 +2,12 @@
 
 namespace Plugify
 {
+    /// <summary>
+    /// Class which every c# plugin must implement.
+    /// </summary>
     public class Plugin : IEquatable<Plugin>, IComparable<Plugin>
     {
-        public ulong Id { get; } 
+        public ulong Id { get; }
         public string Name { get; }
         public string FullName { get; }
         public string Description { get; }
