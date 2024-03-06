@@ -260,10 +260,10 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_appDomain = mono_domain_create_appdomain(appName, nullptr);
 	mono_domain_set(_appDomain, true);
 
-	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-
 	{
 		fs::path coreAssemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
+
+		MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
 
 		// Load a core assembly
 		_core.assembly = utils::LoadMonoAssembly(coreAssemblyPath, _settings.enableDebugging, status);
@@ -291,7 +291,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		fs::path numericsAssemblyPath(monoPath / "mono/4.5/System.Numerics.Vectors.dll");
 
 		// Load a numerics assembly
-		_numerics.assembly = utils::LoadMonoAssembly(numericsAssemblyPath, _settings.enableDebugging, status);
+		_numerics.assembly = mono_domain_assembly_open(_appDomain, numericsAssemblyPath.c_str());
 		if (!_numerics.assembly)
 			return ErrorData{ std::format("Failed to load '{}' assembly. Reason: {}", numericsAssemblyPath.string(), mono_image_strerror(status)) };
 
@@ -361,7 +361,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	DCCallVM* vm = dcNewCallVM(4096);
 	dcMode(vm, DC_CALL_C_DEFAULT);
-	_callVirtMachines = std::unique_ptr<DCCallVM, VMDeleter>(vm);
+	_callVirtMachine = std::unique_ptr<DCCallVM, VMDeleter>(vm);
 
 	_provider->Log("[csharplm] Inited!", Severity::Debug);
 
@@ -372,7 +372,7 @@ void CSharpLanguageModule::Shutdown() {
 	mono_gc_reference_queue_free(_functionReferenceQueue);
 	_functionReferenceQueue = nullptr;
 
-	_callVirtMachines.reset();
+	_callVirtMachine.reset();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
 	_actionClasses.clear();
@@ -647,7 +647,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	std::scoped_lock<std::mutex> lock(g_csharplm._mutex);
 	std::vector<void*> args;
 
-	DCCallVM* vm = g_csharplm._callVirtMachines.get();
+	DCCallVM* vm = g_csharplm._callVirtMachine.get();
 	dcReset(vm);
 
 	bool hasRet = method->retType.type > ValueType::LastPrimitive;
@@ -2213,6 +2213,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 
 LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+	
 	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint, _settings.enableDebugging, status);
 	if (!assembly)
 		return ErrorData{ std::format("Failed to load assembly: '{}'",mono_image_strerror(status)) };
@@ -2361,7 +2362,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 
 		for (const auto& method : plugin.GetDescriptor().exportedMethods) {
 			if (name == method.name) {
-				if (method.IsPrimitive()) { // TODO: Add methods with POD (except return)
+				if (method.IsPrimitive()) {
 					mono_add_internal_call(funcName.c_str(), addr);
 				} else {
 					Function function(_rt);
@@ -2478,7 +2479,7 @@ MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, Mono
 
 template<typename T>
 MonoObject* CSharpLanguageModule::CreateObject(T& source, const ClassInfo& info) {
-	auto instance = InstantiateClass(info.klass);
+	MonoObject* instance = InstantiateClass(info.klass);
 	std::vector<void*> args;
 	args.resize(source.data.size());
 	for (auto& e : source.data) {

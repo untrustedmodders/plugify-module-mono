@@ -164,7 +164,7 @@ namespace csharplm {
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::unordered_map<void*, plugify::Function> _functions;
 
-		std::unique_ptr<DCCallVM, VMDeleter> _callVirtMachines;
+		std::unique_ptr<DCCallVM, VMDeleter> _callVirtMachine;
 		std::map<uint32_t, void*> _cachedDelegates;
 		std::mutex _mutex;
 
