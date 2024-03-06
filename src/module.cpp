@@ -19,7 +19,6 @@
 #include <plugify/plugin_descriptor.h>
 #include <plugify/plugify_provider.h>
 
-#include <dyncall/dyncall.h>
 #include <glaze/glaze.hpp>
 
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
@@ -288,6 +287,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	}
 
 	{
+		// TODO: Consider implement custom version of Vector and Matrix in Plugify.dll
 		fs::path numericsAssemblyPath(monoPath / "mono/4.5/System.Numerics.Vectors.dll");
 
 		// Load a numerics assembly
@@ -359,6 +359,10 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
 
+	DCCallVM* vm = dcNewCallVM(4096);
+	dcMode(vm, DC_CALL_C_DEFAULT);
+	_callVirtMachines = std::unique_ptr<DCCallVM, VMDeleter>(vm);
+
 	_provider->Log("[csharplm] Inited!", Severity::Debug);
 
 	return InitResultData{};
@@ -368,6 +372,7 @@ void CSharpLanguageModule::Shutdown() {
 	mono_gc_reference_queue_free(_functionReferenceQueue);
 	_functionReferenceQueue = nullptr;
 
+	_callVirtMachines.reset();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
 	_actionClasses.clear();
@@ -638,10 +643,11 @@ void DeleteParam(std::vector<void*>& args, uint8_t& i, ValueType type) {
 
 // Call from C# to C++
 void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+	// TODO: Does mutex here valid choise ?
+	std::scoped_lock<std::mutex> lock(g_csharplm._mutex);
 	std::vector<void*> args;
 
-	DCCallVM* vm = dcNewCallVM(4096);
-	dcMode(vm, DC_CALL_C_DEFAULT);
+	DCCallVM* vm = g_csharplm._callVirtMachines.get();
 	dcReset(vm);
 
 	bool hasRet = method->retType.type > ValueType::LastPrimitive;
@@ -1211,8 +1217,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			}
 		}
 	}
-
-	dcFree(vm);
 }
 
 // Call from C++ to C#
@@ -2267,19 +2271,24 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 			continue;
 		}
 
-		char* returnTypeName = mono_type_get_name(mono_signature_get_return_type(sig));
-		ValueType returnType = utils::MonoTypeToValueType(returnTypeName);
-		if (returnType == ValueType::Invalid) {
+		MonoType* returnType = mono_signature_get_return_type(sig);
+		char* returnTypeName = mono_type_get_name(returnType);
+		ValueType retType = utils::MonoTypeToValueType(returnTypeName);
+		
+		if (retType == ValueType::Invalid) {
+			MonoClass* returnClass = mono_class_from_mono_type(returnType);
+			if (mono_class_is_delegate(returnClass)) {
+				retType = ValueType::Function;
+			}
+		}
+		
+		if (retType == ValueType::Invalid) {
 			methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
 			continue;
 		}
 
-		if (method.retType.type == ValueType::Function && returnType == ValueType::Ptr64) {
-			returnType = ValueType::Function; // special case
-		}
-
-		if (returnType != method.retType.type) {
-			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType.type), ValueTypeToString(returnType)));
+		if (retType != method.retType.type) {
+			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(method.retType.type), ValueTypeToString(retType)));
 			continue;
 		}
 
@@ -2290,6 +2299,14 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		while (MonoType* type = mono_signature_get_params(sig, &iter)) {
 			char* paramTypeName = mono_type_get_name(type);
 			ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
+			
+			if (paramType == ValueType::Invalid) {
+				MonoClass* paramClass = mono_class_from_mono_type(type);
+				if (mono_class_is_delegate(paramClass)) {
+					paramType = ValueType::Function;
+				}
+			}
+			
 			if (paramType == ValueType::Invalid) {
 				methodFail = true;
 				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));

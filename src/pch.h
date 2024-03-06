@@ -12,6 +12,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <mutex>
 
 #include <filesystem>
 namespace fs = std::filesystem;

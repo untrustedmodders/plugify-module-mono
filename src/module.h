@@ -1,9 +1,10 @@
 #pragma once
 
-#include <module_export.h>
-#include <plugify/language_module.h>
-#include <plugify/function.h>
 #include <asmjit/asmjit.h>
+#include <dyncall/dyncall.h>
+#include <module_export.h>
+#include <plugify/function.h>
+#include <plugify/language_module.h>
 
 extern "C" {
 	typedef struct _MonoClass MonoClass;
@@ -59,6 +60,16 @@ namespace csharplm {
 	using MethodRef = std::reference_wrapper<const plugify::Method>;
 	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
 
+	/*struct ImportMethod {
+			MethodRef method;
+			void* addr{ nullptr };
+		};*/
+
+	struct ExportMethod {
+		MonoMethod* method{ nullptr };
+		MonoObject* instance{ nullptr };
+	};
+
 	struct AssemblyInfo {
 		MonoAssembly* assembly{ nullptr };
 		MonoImage* image{ nullptr };
@@ -67,6 +78,12 @@ namespace csharplm {
 	struct ClassInfo {
 		MonoClass* klass{ nullptr };
 		MonoMethod* ctor{ nullptr };
+	};
+
+	struct VMDeleter {
+		void operator()(DCCallVM* vm) const {
+			dcFree(vm);
+		}
 	};
 
 	class CSharpLanguageModule final : public plugify::ILanguageModule {
@@ -124,17 +141,6 @@ namespace csharplm {
 		void CleanupDelegateCache();
 
 	private:
-		/*struct ImportMethod {
-			MethodRef method;
-			void* addr{ nullptr };
-		};*/
-
-		struct ExportMethod {
-			MonoMethod* method{ nullptr };
-			MonoObject* instance{ nullptr };
-		};
-
-	private:
 		MonoDomain* _rootDomain{ nullptr };
 		MonoDomain* _appDomain{ nullptr };
 		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
@@ -146,16 +152,21 @@ namespace csharplm {
 		ClassInfo _vector2;
 		ClassInfo _vector3;
 		ClassInfo _vector4;
-		ClassInfo _matrix4x4;
 		ClassInfo _matrix3x2;
+		ClassInfo _matrix4x4;
 
 		std::shared_ptr<asmjit::JitRuntime> _rt;
 		std::shared_ptr<plugify::IPlugifyProvider> _provider;
+		
 		std::set<std::string/*, ImportMethod*/> _importMethods;
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
+		
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::unordered_map<void*, plugify::Function> _functions;
+
+		std::unique_ptr<DCCallVM, VMDeleter> _callVirtMachines;
 		std::map<uint32_t, void*> _cachedDelegates;
+		std::mutex _mutex;
 
 		std::vector<MonoClass*> _funcClasses;
 		std::vector<MonoClass*> _actionClasses;
