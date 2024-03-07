@@ -146,13 +146,11 @@ namespace csharplm {
 		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
 
 		AssemblyInfo _core;
-		AssemblyInfo _numerics;
 
 		ClassInfo _plugin;
 		ClassInfo _vector2;
 		ClassInfo _vector3;
 		ClassInfo _vector4;
-		ClassInfo _matrix3x2;
 		ClassInfo _matrix4x4;
 
 		std::shared_ptr<asmjit::JitRuntime> _rt;

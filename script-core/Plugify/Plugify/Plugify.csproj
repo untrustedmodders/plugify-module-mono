@@ -39,6 +39,14 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="InternalCalls.cs" />
+        <Compile Include="Math\Color.cs" />
+        <Compile Include="Math\Color32.cs" />
+        <Compile Include="Math\Mathf.cs" />
+        <Compile Include="Math\Matrix4x4.cs" />
+        <Compile Include="Math\Quaternion.cs" />
+        <Compile Include="Math\Vector2.cs" />
+        <Compile Include="Math\Vector3.cs" />
+        <Compile Include="Math\Vector4.cs" />
         <Compile Include="MinimumApiVersion.cs" />
         <Compile Include="Plugin.cs" />
         <Compile Include="Properties\AssemblyInfo.cs" />

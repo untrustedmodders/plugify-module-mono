@@ -182,11 +182,10 @@ namespace csharplm::utils {
 			{ "System.Action`15", ValueType::Function },
 			{ "System.Action`16", ValueType::Function },
 			
-			{ "System.Numerics.Vector2", ValueType::Vector2 },
-			{ "System.Numerics.Vector3", ValueType::Vector3 },
-			{ "System.Numerics.Vector4", ValueType::Vector4 },
-			{ "System.Numerics.Matrix3x2", ValueType::Matrix3x2 },
-			{ "System.Numerics.Matrix4x4", ValueType::Matrix4x4 },
+			{ "Plugify.Vector2", ValueType::Vector2 },
+			{ "Plugify.Vector3", ValueType::Vector3 },
+			{ "Plugify.Vector4", ValueType::Vector4 },
+			{ "Plugify.Matrix4x4", ValueType::Matrix4x4 },
 		};
 		auto it = valueTypeMap.find(typeName);
 		if (it != valueTypeMap.end())
@@ -203,9 +202,35 @@ namespace csharplm::utils {
 		return {};
 	}
 
-	void CacheCoreClass(std::vector<MonoClass*>& storage, const char* name) {
+	bool IsMethodPrimitive(const plugify::Method& method) {
+		if (method.retType.type >= ValueType::LastPrimitive)
+			return false;
+
+		for (const auto& param : method.paramTypes) {
+			if (param.type >= ValueType::LastPrimitive && param.type < ValueType::FirstPOD)
+				return false;
+		}
+
+		return true;
+	}
+
+	void LoadSystemClass(std::vector<MonoClass*>& storage, const char* name) {
 		MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
 		if (klass != nullptr) storage.push_back(klass);
+	}
+
+	ClassInfo LoadCoreClass(std::vector<std::string>& classErrors, MonoImage* image, const char* name, int paramCount) {
+		MonoClass* klass = mono_class_from_name(image, "Plugify", name);
+		if (!klass) {
+			classErrors.emplace_back(name);
+			return {};
+		}
+		MonoMethod* ctor = mono_class_get_method_from_name(klass, ".ctor", paramCount);
+		if (!ctor) {
+			classErrors.emplace_back(name + "::ctor"s);
+			return {};
+		}
+		return { klass, ctor };
 	}
 
 	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
@@ -276,86 +301,59 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 		// Retrieve and cache core classes/methods
 
-		/// Plugin
-		_plugin.klass = mono_class_from_name(_core.image, "Plugify", "Plugin");
-		if (!_plugin.klass)
-			return ErrorData{std::format("Failed to find 'Plugin' class! Check '{}' assembly!", coreAssemblyPath.string())};
+		std::vector<std::string> classErrors;
 
-		_plugin.ctor = mono_class_get_method_from_name(_plugin.klass, ".ctor", 8);
-		if (!_plugin.ctor)
-			return ErrorData{std::format("Failed to find 'Plugin' .ctor method! Check '{}' assembly!", coreAssemblyPath.string())};
-	}
+		_plugin = utils::LoadCoreClass(classErrors, _core.image, "Plugin", 8);
+		_vector2 = utils::LoadCoreClass(classErrors, _core.image, "Vector2", 2);
+		_vector3 = utils::LoadCoreClass(classErrors, _core.image, "Vector3", 3);
+		_vector4 = utils::LoadCoreClass(classErrors, _core.image, "Vector4", 4);
+		_matrix4x4 = utils::LoadCoreClass(classErrors, _core.image, "Matrix4x4", 16);
 
-	{
-		// TODO: Consider implement custom version of Vector and Matrix in Plugify.dll
-		fs::path numericsAssemblyPath(monoPath / "mono/4.5/System.Numerics.Vectors.dll");
-
-		// Load a numerics assembly
-		_numerics.assembly = mono_domain_assembly_open(_appDomain, numericsAssemblyPath.c_str());
-		if (!_numerics.assembly)
-			return ErrorData{ std::format("Failed to load '{}' assembly. Reason: {}", numericsAssemblyPath.string(), mono_image_strerror(status)) };
-
-		_numerics.image = mono_assembly_get_image(_numerics.assembly);
-		if (!_numerics.image)
-			return ErrorData{ std::format("Failed to load '{}' image.", numericsAssemblyPath.string()) };
-
-		/// Vector2
-		_vector2.klass = mono_class_from_name(_numerics.image, "System.Numerics", "Vector2");
-		_vector2.ctor = mono_class_get_method_from_name(_vector2.klass, ".ctor", 2);
-
-		/// Vector3
-		_vector3.klass = mono_class_from_name(_numerics.image, "System.Numerics", "Vector3");
-		_vector3.ctor = mono_class_get_method_from_name(_vector3.klass, ".ctor", 3);
-
-		/// Vector4
-		_vector4.klass = mono_class_from_name(_numerics.image, "System.Numerics", "Vector4");
-		_vector4.ctor = mono_class_get_method_from_name(_vector4.klass, ".ctor", 4);
-
-		/// Matrix3x2
-		_matrix3x2.klass = mono_class_from_name(_numerics.image, "System.Numerics", "Matrix3x2");
-		_matrix3x2.ctor = mono_class_get_method_from_name(_matrix3x2.klass, ".ctor", 6);
-
-		/// Matrix4x4
-		_matrix4x4.klass = mono_class_from_name(_numerics.image, "System.Numerics", "Matrix4x4");
-		_matrix4x4.ctor = mono_class_get_method_from_name(_matrix4x4.klass, ".ctor", 16);
+		if (!classErrors.empty()) {
+			std::string funcs("Not found: " + classErrors[0]);
+			for (auto it = std::next(classErrors.begin()); it != classErrors.end(); ++it) {
+				std::format_to(std::back_inserter(funcs), ", {}", *it);
+			}
+			return ErrorData{ std::move(funcs) };
+		}
 	}
 
 	/// Delegates
-	utils::CacheCoreClass(_funcClasses, "Func`1");
-	utils::CacheCoreClass(_funcClasses, "Func`2");
-	utils::CacheCoreClass(_funcClasses, "Func`3");
-	utils::CacheCoreClass(_funcClasses, "Func`4");
-	utils::CacheCoreClass(_funcClasses, "Func`5");
-	utils::CacheCoreClass(_funcClasses, "Func`6");
-	utils::CacheCoreClass(_funcClasses, "Func`7");
-	utils::CacheCoreClass(_funcClasses, "Func`8");
-	utils::CacheCoreClass(_funcClasses, "Func`9");
-	utils::CacheCoreClass(_funcClasses, "Func`10");
-	utils::CacheCoreClass(_funcClasses, "Func`11");
-	utils::CacheCoreClass(_funcClasses, "Func`12");
-	utils::CacheCoreClass(_funcClasses, "Func`13");
-	utils::CacheCoreClass(_funcClasses, "Func`14");
-	utils::CacheCoreClass(_funcClasses, "Func`15");
-	utils::CacheCoreClass(_funcClasses, "Func`16");
-	utils::CacheCoreClass(_funcClasses, "Func`17");
+	utils::LoadSystemClass(_funcClasses, "Func`1");
+	utils::LoadSystemClass(_funcClasses, "Func`2");
+	utils::LoadSystemClass(_funcClasses, "Func`3");
+	utils::LoadSystemClass(_funcClasses, "Func`4");
+	utils::LoadSystemClass(_funcClasses, "Func`5");
+	utils::LoadSystemClass(_funcClasses, "Func`6");
+	utils::LoadSystemClass(_funcClasses, "Func`7");
+	utils::LoadSystemClass(_funcClasses, "Func`8");
+	utils::LoadSystemClass(_funcClasses, "Func`9");
+	utils::LoadSystemClass(_funcClasses, "Func`10");
+	utils::LoadSystemClass(_funcClasses, "Func`11");
+	utils::LoadSystemClass(_funcClasses, "Func`12");
+	utils::LoadSystemClass(_funcClasses, "Func`13");
+	utils::LoadSystemClass(_funcClasses, "Func`14");
+	utils::LoadSystemClass(_funcClasses, "Func`15");
+	utils::LoadSystemClass(_funcClasses, "Func`16");
+	utils::LoadSystemClass(_funcClasses, "Func`17");
 
-	utils::CacheCoreClass(_actionClasses, "Action");
-	utils::CacheCoreClass(_actionClasses, "Action`1");
-	utils::CacheCoreClass(_actionClasses, "Action`2");
-	utils::CacheCoreClass(_actionClasses, "Action`3");
-	utils::CacheCoreClass(_actionClasses, "Action`4");
-	utils::CacheCoreClass(_actionClasses, "Action`5");
-	utils::CacheCoreClass(_actionClasses, "Action`6");
-	utils::CacheCoreClass(_actionClasses, "Action`7");
-	utils::CacheCoreClass(_actionClasses, "Action`8");
-	utils::CacheCoreClass(_actionClasses, "Action`9");
-	utils::CacheCoreClass(_actionClasses, "Action`10");
-	utils::CacheCoreClass(_actionClasses, "Action`11");
-	utils::CacheCoreClass(_actionClasses, "Action`12");
-	utils::CacheCoreClass(_actionClasses, "Action`13");
-	utils::CacheCoreClass(_actionClasses, "Action`14");
-	utils::CacheCoreClass(_actionClasses, "Action`15");
-	utils::CacheCoreClass(_actionClasses, "Action`16");
+	utils::LoadSystemClass(_actionClasses, "Action");
+	utils::LoadSystemClass(_actionClasses, "Action`1");
+	utils::LoadSystemClass(_actionClasses, "Action`2");
+	utils::LoadSystemClass(_actionClasses, "Action`3");
+	utils::LoadSystemClass(_actionClasses, "Action`4");
+	utils::LoadSystemClass(_actionClasses, "Action`5");
+	utils::LoadSystemClass(_actionClasses, "Action`6");
+	utils::LoadSystemClass(_actionClasses, "Action`7");
+	utils::LoadSystemClass(_actionClasses, "Action`8");
+	utils::LoadSystemClass(_actionClasses, "Action`9");
+	utils::LoadSystemClass(_actionClasses, "Action`10");
+	utils::LoadSystemClass(_actionClasses, "Action`11");
+	utils::LoadSystemClass(_actionClasses, "Action`12");
+	utils::LoadSystemClass(_actionClasses, "Action`13");
+	utils::LoadSystemClass(_actionClasses, "Action`14");
+	utils::LoadSystemClass(_actionClasses, "Action`15");
+	utils::LoadSystemClass(_actionClasses, "Action`16");
 
 	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
 
@@ -526,7 +524,7 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 	
 	void* methodAddr;
 		
-	if (method.IsPrimitive()) {
+	if (utils::IsMethodPrimitive(method)) {
 		methodAddr = mono_delegate_to_ftnptr(source);
 	} else {
 		auto function = new plugify::Function(_rt);
@@ -561,10 +559,6 @@ void DeleteParam(std::vector<void*>& args, uint8_t& i, ValueType type) {
 		}
 		case ValueType::Vector4: {
 			delete reinterpret_cast<plugify::Vector4*>(args[i++]);
-			break;
-		}
-		case ValueType::Matrix3x2: {
-			delete reinterpret_cast<plugify::Matrix3x2*>(args[i++]);
 			break;
 		}
 		case ValueType::Matrix4x4: {
@@ -666,9 +660,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			case ValueType::Vector4:
 				dcArgPointer(vm, MonoStructToArg<plugify::Vector4>(args));
 				break;
-			case ValueType::Matrix3x2:
-				dcArgPointer(vm, MonoStructToArg<plugify::Matrix3x2>(args));
-				break;
 			case ValueType::Matrix4x4:
 				dcArgPointer(vm, MonoStructToArg<plugify::Matrix4x4>(args));
 				break;
@@ -752,7 +743,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::Vector2:
 				case ValueType::Vector3:
 				case ValueType::Vector4:
-				case ValueType::Matrix3x2:
 				case ValueType::Matrix4x4:
 					dcArgPointer(vm, p->GetArgumentPtr(i));
 					break;
@@ -856,7 +846,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::Vector2:
 				case ValueType::Vector3:
 				case ValueType::Vector4:
-				case ValueType::Matrix3x2:
 				case ValueType::Matrix4x4:
 					dcArgPointer(vm, p->GetArgumentPtr(i));
 					break;	
@@ -1020,11 +1009,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		case ValueType::Vector4: {
 			dcCallVoid(vm, addr);
 			ret->SetReturnPtr(g_csharplm.CreateObject(*reinterpret_cast<plugify::Vector4*>(args[0]), g_csharplm._vector4));
-			break;
-		}
-		case ValueType::Matrix3x2: {
-			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateObject(*reinterpret_cast<plugify::Matrix3x2*>(args[0]), g_csharplm._matrix3x2));
 			break;
 		}
 		case ValueType::Matrix4x4: {
@@ -1254,7 +1238,6 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			case ValueType::Vector2:
 			case ValueType::Vector3:
 			case ValueType::Vector4:
-			case ValueType::Matrix3x2:
 			case ValueType::Matrix4x4:
 				args[j] = p->GetArgumentPtr(i);
 				break;
@@ -1589,12 +1572,6 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 				*dest = *source;
 				break;
 			}
-			case ValueType::Matrix3x2: {
-				auto source = reinterpret_cast<plugify::Matrix3x2*>(mono_object_unbox(result));
-				auto dest = p->GetArgument<plugify::Matrix3x2*>(0);
-				*dest = *source;
-				break;
-			}
 			case ValueType::Matrix4x4: {
 				auto source = reinterpret_cast<plugify::Matrix4x4*>(mono_object_unbox(result));
 				auto dest = p->GetArgument<plugify::Matrix4x4*>(0);
@@ -1750,7 +1727,6 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 			case ValueType::Vector2:
 			case ValueType::Vector3:
 			case ValueType::Vector4:
-			case ValueType::Matrix3x2:
 			case ValueType::Matrix4x4:
 				args[j] = p->GetArgumentPtr(i);
 				break;
@@ -2085,12 +2061,6 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 				*dest = *source;
 				break;
 			}
-			case ValueType::Matrix3x2: {
-				auto source = reinterpret_cast<plugify::Matrix3x2*>(mono_object_unbox(result));
-				auto dest = p->GetArgument<plugify::Matrix3x2*>(0);
-				*dest = *source;
-				break;
-			}
 			case ValueType::Matrix4x4: {
 				auto source = reinterpret_cast<plugify::Matrix4x4*>(mono_object_unbox(result));
 				auto dest = p->GetArgument<plugify::Matrix4x4*>(0);
@@ -2362,7 +2332,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 
 		for (const auto& method : plugin.GetDescriptor().exportedMethods) {
 			if (name == method.name) {
-				if (method.IsPrimitive()) {
+				if (utils::IsMethodPrimitive(method)) {
 					mono_add_internal_call(funcName.c_str(), addr);
 				} else {
 					Function function(_rt);
@@ -2453,7 +2423,7 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 
 	MonoClass* delegateClass = method.retType.type != ValueType::Void ? _funcClasses[paramCount] : _actionClasses[paramCount];
 
-	if (method.IsPrimitive()) {
+	if (utils::IsMethodPrimitive(method)) {
 		return mono_ftnptr_to_delegate(delegateClass, func);
 	} else {
 		auto function = new plugify::Function(_rt);
