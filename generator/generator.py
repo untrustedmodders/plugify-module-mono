@@ -37,7 +37,11 @@ TYPES_MAP = {
     'ptr64*': 'IntPtr[]',
     'float*': 'float[]',
     'double*': 'double[]',
-    'string*': 'string[]'
+    'string*': 'string[]',
+    'vec2': 'Vector2',
+    'vec3': 'Vector3',
+    'vec4': 'Vector4',
+    'mat4x4': 'Matrix4x4'
 }
 
 INVALID_NAMES = {
