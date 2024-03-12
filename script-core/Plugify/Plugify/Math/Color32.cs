@@ -9,7 +9,7 @@ namespace Plugify
     public struct Color32 : IFormattable
     {
         [FieldOffset(0)]
-        private int rgba;
+        public readonly int rgba;
         [FieldOffset(0)]
         public byte r;
         [FieldOffset(1)]
