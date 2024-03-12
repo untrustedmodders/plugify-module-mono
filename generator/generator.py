@@ -94,7 +94,7 @@ INVALID_NAMES = {
     "params",
     "private",
     "protected",
-    "public",
+    "internal",
     "readonly",
     "ref",
     "return",
@@ -281,7 +281,7 @@ def main(manifest_path, output_dir, override):
             if "prototype" in attribute:
                 content += gen_delegate(attribute['prototype'])
 
-    content += f'\n\tpublic static class {plugin_name}\n\t{{'
+    content += f'\n\tinternal static class {plugin_name}\n\t{{'
     content += '\n'
     for method in pplugin['exportedMethods']:
         content += "\t\t[MethodImplAttribute(MethodImplOptions.InternalCall)]\n"
