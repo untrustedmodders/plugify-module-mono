@@ -97,17 +97,14 @@ namespace csharplm::utils {
 		auto length = mono_array_length(array);
 		dest.resize(length);
 		for (size_t i = 0; i < length; ++i) {
-			MonoObject* element = mono_array_get(array, MonoObject*, i);
 			if constexpr (std::is_same_v<T, std::string>) {
+				MonoObject* element = mono_array_get(array, MonoObject*, i);
 				if (element != nullptr)
 					dest[i] = MonoStringToUTF8(reinterpret_cast<MonoString*>(element));
 				else
 					dest[i] = T{};
 			} else {
-				if (element != nullptr)
-					dest[i] = *reinterpret_cast<T*>(mono_object_unbox(element));
-				else
-					dest[i] = T{};
+				dest[i] =  mono_array_get(array, T, i);
 			}
 		}
 	}
@@ -2338,7 +2335,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 					Function function(_rt);
 					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr);
 					if (!methodAddr) {
-						_provider->Log(std::format("[csharplm] Method JIT generation error: {}", function.GetError()), Severity::Error);
+						_provider->Log(std::format("[csharplm] {}: {}", method.funcName, function.GetError()), Severity::Error);
 						continue;
 					}
 					_functions.emplace(methodAddr, std::move(function));
