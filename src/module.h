@@ -11,6 +11,7 @@ extern "C" {
 	typedef struct _MonoObject MonoObject;
 	typedef struct _MonoMethod MonoMethod;
 	typedef struct _MonoAssembly MonoAssembly;
+	typedef struct _MonoAssemblyName MonoAssemblyName;
 	typedef struct _MonoImage MonoImage;
 	typedef struct _MonoReferenceQueue MonoReferenceQueue;
 	typedef struct _MonoClassField MonoClassField;
@@ -47,23 +48,30 @@ namespace csharplm {
 		MonoImage* _image{ nullptr };
 		MonoClass* _klass{ nullptr };
 		MonoObject* _instance{ nullptr };
-		
+
 		MonoMethod* _onStartMethod{ nullptr };
 		MonoMethod* _onEndMethod{ nullptr };
 
 		friend class CSharpLanguageModule;
 	};
 
+	namespace utils {
+		std::string MonoStringToUTF8(MonoString* string);
+		template<typename T>
+		void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
+	}
+
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
 	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
 	using PluginRef = std::reference_wrapper<const plugify::IPlugin>;
 	using MethodRef = std::reference_wrapper<const plugify::Method>;
 	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
+	//using AssemblyMap = std::unordered_map<std::string, MonoAssembly*>;
 
 	/*struct ImportMethod {
-			MethodRef method;
-			void* addr{ nullptr };
-		};*/
+		MethodRef method;
+		void* addr{ nullptr };
+	};*/
 
 	struct ExportMethod {
 		MonoMethod* method{ nullptr };
@@ -101,9 +109,9 @@ namespace csharplm {
 
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptOpt FindScript(const std::string& name);
-		ScriptOpt FindScript(MonoString* name);
 
 		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
+		MonoAssemblyName* GetAssemblyName() { return _assemblyName; }
 
 		template<typename T>
 		MonoArray* CreateArrayT(const std::vector<T>& source, MonoClass* klass);
@@ -131,11 +139,11 @@ namespace csharplm {
 		static void InternalCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 		static void DelegateCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
-		template<typename T>
-		static void* MonoStructToArg(std::vector<void*>& args);
-		template<typename T>
-		static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
-		static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
+		//template<typename T>
+		//static void* MonoStructToArg(std::vector<void*>& args);
+		//template<typename T>
+		//static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
+		//static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
 		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method);
 
 		void CleanupDelegateCache();
@@ -144,6 +152,7 @@ namespace csharplm {
 		MonoDomain* _rootDomain{ nullptr };
 		MonoDomain* _appDomain{ nullptr };
 		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
+		MonoAssemblyName* _assemblyName{ nullptr };
 
 		AssemblyInfo _core;
 

@@ -34,6 +34,8 @@ struct _MonoDelegate {
 	//....
 };
 
+#define LOG_PREFIX "[csharplm] "
+
 using namespace csharplm;
 using namespace plugify;
 using namespace std::string_literals;
@@ -62,6 +64,43 @@ namespace csharplm::utils {
 		if (status != MONO_IMAGE_OK)
 			return nullptr;
 
+		for (int i = 0; i < mono_image_get_table_rows(image, MONO_TABLE_ASSEMBLYREF); ++i) {
+			mono_assembly_load_reference(image, i);
+
+			MonoAssemblyName* aname = g_csharplm.GetAssemblyName();
+			mono_assembly_get_assemblyref(image, i, aname);
+
+			MonoAssembly* assembly = mono_assembly_loaded(aname);
+			if (!assembly) {
+				std::error_code error;
+				std::string_view name = mono_assembly_name_get_name(aname);
+				bool hasExtension = name.ends_with(".dll") || name.ends_with(".exe");
+				fs::path refPath(assemblyPath.parent_path() / name);
+				if (hasExtension) {
+					if (fs::exists(refPath, error)) {
+						LoadMonoAssembly(refPath, loadPDB, status);
+						if (status != MONO_IMAGE_OK)
+							break;
+					}
+				} else {
+					refPath += ".dll";
+					if (fs::exists(refPath, error)) {
+						LoadMonoAssembly(refPath, loadPDB, status);
+						if (status == MONO_IMAGE_OK)
+							continue;
+					}
+
+					refPath.replace_extension(".exe");
+					if (fs::exists(refPath, error)) {
+						LoadMonoAssembly(refPath, loadPDB, status);
+						if (status != MONO_IMAGE_OK)
+							break;
+					}
+					// If ref not load ?
+				}
+			}
+		}
+
 		if (loadPDB) {
 			fs::path pdbPath(assemblyPath);
 			pdbPath.replace_extension(".pdb");
@@ -83,7 +122,7 @@ namespace csharplm::utils {
 		MonoError error;
 		char* utf8 = mono_string_to_utf8_checked(string, &error);
 		if (!mono_error_ok(&error)) {
-			g_csharplm.GetProvider()->Log(std::format("[csharplm] Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+			g_csharplm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
 			mono_error_cleanup(&error);
 			return {};
 		}
@@ -265,7 +304,9 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_settings = std::move(*settings);
 
 	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM);
-	if (!fs::exists(monoPath))
+	
+	std::error_code error;
+	if (!fs::exists(monoPath, error))
 		return ErrorData{ std::format("Path to mono assemblies not exist '{}'", monoPath.string()) };
 
 	fs::path configPath(module.GetBaseDir() / "config");
@@ -282,37 +323,35 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_appDomain = mono_domain_create_appdomain(appName, nullptr);
 	mono_domain_set(_appDomain, true);
 
-	{
-		fs::path coreAssemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
+	fs::path coreAssemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
 
-		MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
 
-		// Load a core assembly
-		_core.assembly = utils::LoadMonoAssembly(coreAssemblyPath, _settings.enableDebugging, status);
-		if (!_core.assembly)
-			return ErrorData{std::format("Failed to load '{}' assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
+	// Load a core assembly
+	_core.assembly = utils::LoadMonoAssembly(coreAssemblyPath, _settings.enableDebugging, status);
+	if (!_core.assembly)
+		return ErrorData{std::format("Failed to load '{}' assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
 
-		_core.image = mono_assembly_get_image(_core.assembly);
-		if (!_core.image)
-			return ErrorData{std::format("Failed to load '{}' image.", coreAssemblyPath.string())};
+	_core.image = mono_assembly_get_image(_core.assembly);
+	if (!_core.image)
+		return ErrorData{std::format("Failed to load '{}' image.", coreAssemblyPath.string())};
 
-		// Retrieve and cache core classes/methods
+	// Retrieve and cache core classes/methods
 
-		std::vector<std::string> classErrors;
+	std::vector<std::string> classErrors;
 
-		_plugin = utils::LoadCoreClass(classErrors, _core.image, "Plugin", 8);
-		_vector2 = utils::LoadCoreClass(classErrors, _core.image, "Vector2", 2);
-		_vector3 = utils::LoadCoreClass(classErrors, _core.image, "Vector3", 3);
-		_vector4 = utils::LoadCoreClass(classErrors, _core.image, "Vector4", 4);
-		_matrix4x4 = utils::LoadCoreClass(classErrors, _core.image, "Matrix4x4", 16);
+	_plugin = utils::LoadCoreClass(classErrors, _core.image, "Plugin", 8);
+	_vector2 = utils::LoadCoreClass(classErrors, _core.image, "Vector2", 2);
+	_vector3 = utils::LoadCoreClass(classErrors, _core.image, "Vector3", 3);
+	_vector4 = utils::LoadCoreClass(classErrors, _core.image, "Vector4", 4);
+	_matrix4x4 = utils::LoadCoreClass(classErrors, _core.image, "Matrix4x4", 16);
 
-		if (!classErrors.empty()) {
-			std::string funcs("Not found: " + classErrors[0]);
-			for (auto it = std::next(classErrors.begin()); it != classErrors.end(); ++it) {
-				std::format_to(std::back_inserter(funcs), ", {}", *it);
-			}
-			return ErrorData{ std::move(funcs) };
+	if (!classErrors.empty()) {
+		std::string funcs("Not found: " + classErrors[0]);
+		for (auto it = std::next(classErrors.begin()); it != classErrors.end(); ++it) {
+			std::format_to(std::back_inserter(funcs), ", {}", *it);
 		}
+		return ErrorData{ std::move(funcs) };
 	}
 
 	/// Delegates
@@ -354,19 +393,31 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
 
+	// MonoAssemblyName is an incomplete type (internal to mono), so we can't allocate it ourselves.
+	// There isn't any api to allocate an empty one either, so we need to do it this way.
+	_assemblyName = mono_assembly_name_new("blank");
+	mono_assembly_name_free(_assemblyName); // "it does not frees the object itself, only the name members" (typo included)
+	
 	DCCallVM* vm = dcNewCallVM(4096);
 	dcMode(vm, DC_CALL_C_DEFAULT);
 	_callVirtMachine = std::unique_ptr<DCCallVM, VMDeleter>(vm);
 
-	_provider->Log("[csharplm] Inited!", Severity::Debug);
+	_provider->Log(LOG_PREFIX "Inited!", Severity::Debug);
 
 	return InitResultData{};
 }
 
 void CSharpLanguageModule::Shutdown() {
-	mono_gc_reference_queue_free(_functionReferenceQueue);
-	_functionReferenceQueue = nullptr;
-
+	if (_functionReferenceQueue) {
+		mono_gc_reference_queue_free(_functionReferenceQueue);
+		_functionReferenceQueue = nullptr;
+	}
+	
+	if (_assemblyName) {
+		mono_free(_assemblyName);
+		_assemblyName = nullptr;
+	}
+	
 	_callVirtMachine.reset();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
@@ -402,7 +453,7 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 		for (auto& opt: _settings.options) {
 			if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
 				if (opt.starts_with("--debugger")) {
-					_provider->Log(std::format("[csharplm] Mono debugger: {}", opt), Severity::Info);
+					_provider->Log(std::format(LOG_PREFIX "Mono debugger: {}", opt), Severity::Info);
 				}
 				options.push_back(opt.data());
 			}
@@ -415,7 +466,8 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 	if (!_settings.mask.empty())
 		mono_trace_set_mask_string(_settings.mask.c_str());
 
-	mono_config_parse(fs::exists(configPath) ? configPath.string().c_str() : nullptr);
+	std::error_code error;
+	mono_config_parse(fs::exists(configPath, error) ? configPath.string().c_str() : nullptr);
 
 	_rootDomain = mono_jit_init("PlugifyJITRuntime");
 	if (!_rootDomain)
@@ -432,7 +484,7 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 	//mono_set_crash_chaining(true);
 
 	char* buildInfo = mono_get_runtime_build_info();
-	_provider->Log(std::format("[csharplm] Mono: Runtime version: {}", buildInfo), Severity::Debug);
+	_provider->Log(std::format(LOG_PREFIX "Mono: Runtime version: {}", buildInfo), Severity::Debug);
 	mono_free(buildInfo);
 
 	return true;
@@ -456,14 +508,14 @@ void CSharpLanguageModule::ShutdownMono() {
 }
 
 template<typename T>
-void* CSharpLanguageModule::MonoStructToArg(std::vector<void*>& args) {
+CSHARPLM_INLINE void* /*CSharpLanguageModule::*/MonoStructToArg(std::vector<void*>& args) {
 	auto* dest = new T();
 	args.push_back(dest);
 	return dest;
 }
 
 template<typename T>
-void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, std::vector<void*>& args) {
+CSHARPLM_INLINE void* /*CSharpLanguageModule::*/MonoArrayToArg(MonoArray* source, std::vector<void*>& args) {
 	auto* dest = new std::vector<T>();
 	if (source != nullptr) {
 		utils::MonoArrayToVector(source, *dest);
@@ -472,13 +524,13 @@ void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, std::vector<void*>
 	return dest;
 }
 
-void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void*>& args) {
+CSHARPLM_INLINE void* /*CSharpLanguageModule::*/MonoStringToArg(MonoString* source, std::vector<void*>& args) {
 	std::string* dest;
 	if (source != nullptr) {
 		MonoError error;
 		char* cStr = mono_string_to_utf8_checked(source, &error);
 		if (!mono_error_ok(&error)) {
-			g_csharplm._provider->Log(std::format("[csharplm] Failed to convert MonoString* to UTF-8: '{}'.", mono_error_get_message(&error)), Severity::Debug);
+			g_csharplm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
 			mono_error_cleanup(&error);
 			return {};
 		}
@@ -493,7 +545,7 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void
 
 void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) {
 	if (source == nullptr) {
-		_provider->Log("[csharplm] Delegate is null", Severity::Warning);
+		_provider->Log(LOG_PREFIX "Delegate is null", Severity::Warning);
 		return nullptr;
 	}
 
@@ -634,7 +686,7 @@ void DeleteParam(std::vector<void*>& args, uint8_t& i, ValueType type) {
 
 // Call from C# to C++
 void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
-	// TODO: Does mutex here valid choise ?
+	// TODO: Does mutex here good choose ?
 	std::scoped_lock<std::mutex> lock(g_csharplm._mutex);
 	std::vector<void*> args;
 
@@ -2181,17 +2233,19 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
 	
-	MonoAssembly* assembly = utils::LoadMonoAssembly(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint, _settings.enableDebugging, status);
+	fs::path assemblyPath(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint);
+	
+	MonoAssembly* assembly = utils::LoadMonoAssembly(assemblyPath, _settings.enableDebugging, status);
 	if (!assembly)
-		return ErrorData{ std::format("Failed to load assembly: '{}'",mono_image_strerror(status)) };
+		return ErrorData{ std::format("Failed to load assembly: '{}'", mono_image_strerror(status)) };
 
 	MonoImage* image = mono_assembly_get_image(assembly);
 	if (!image)
-		return ErrorData{ std::format("Failed to load assembly image") };
+		return ErrorData{ "Failed to load assembly image" };
 
 	auto scriptRef = CreateScriptInstance(plugin, image);
 	if (!scriptRef.has_value())
-		return ErrorData{ std::format("Failed to find 'Plugin' class implementation") };
+		return ErrorData{ "Failed to find 'Plugin' class implementation" };
 	auto& script = scriptRef->get();
 
 	std::vector<std::string> methodErrors;
@@ -2323,7 +2377,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 		auto funcName = std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), name);
 
 		if (_importMethods.contains(funcName)) {
-			_provider->Log(std::format("[csharplm] Method name duplicate: {}", funcName), Severity::Error);
+			_provider->Log(std::format(LOG_PREFIX "Method name duplicate: {}", funcName), Severity::Error);
 			continue;
 		}
 
@@ -2335,7 +2389,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 					Function function(_rt);
 					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr);
 					if (!methodAddr) {
-						_provider->Log(std::format("[csharplm] {}: {}", method.funcName, function.GetError()), Severity::Error);
+						_provider->Log(std::format(LOG_PREFIX "{}: {}", method.funcName, function.GetError()), Severity::Error);
 						continue;
 					}
 					_functions.emplace(methodAddr, std::move(function));
@@ -2402,19 +2456,12 @@ ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 	return std::nullopt;
 }
 
-ScriptOpt CSharpLanguageModule::FindScript(MonoString* name) {
-	auto it = _scripts.find(utils::MonoStringToUTF8(name));
-	if (it != _scripts.end())
-		return std::get<ScriptInstance>(*it);
-	return std::nullopt;
-}
-
 MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Method& method) {
 	auto& delegateClasses = method.retType.type != ValueType::Void ? _funcClasses : _actionClasses;
 
 	size_t paramCount = method.paramTypes.size();
 	if (paramCount >= delegateClasses.size()) {
-		_provider->Log(std::format("[csharplm] Function '{}' has too much arguments to create delegate", method.name), Severity::Error);
+		_provider->Log(std::format(LOG_PREFIX "Function '{}' has too much arguments to create delegate", method.name), Severity::Error);
 		return nullptr;
 	}
 
@@ -2480,7 +2527,7 @@ void CSharpLanguageModule::HandleException(MonoObject* exc, void* /* userData*/)
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
 
-	std::string result("[csharplm] [Exception] ");
+	std::string result(LOG_PREFIX "[Exception] ");
 
 	std::string message = utils::GetStringProperty("Message", exceptionClass, exc);
 	if (!message.empty()) {
@@ -2536,20 +2583,20 @@ void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logL
 	}
 
 	if (!logDomain || strlen(logDomain) == 0) {
-		g_csharplm._provider->Log(std::format("[csharplm] {}", message), fatal ? Severity::Fatal : severity);
+		g_csharplm._provider->Log(std::format(LOG_PREFIX "{}", message), fatal ? Severity::Fatal : severity);
 	} else {
-		g_csharplm._provider->Log(std::format("[csharplm] [{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
+		g_csharplm._provider->Log(std::format(LOG_PREFIX "[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
 	}
 }
 
 void CSharpLanguageModule::OnPrintCallback(const char* message, mono_bool /*isStdout*/) {
 	if (g_csharplm._provider)
-		g_csharplm._provider->Log(std::format("[csharplm] {}", message), Severity::Warning);
+		g_csharplm._provider->Log(std::format(LOG_PREFIX "{}", message), Severity::Warning);
 }
 
 void CSharpLanguageModule::OnPrintErrorCallback(const char* message, mono_bool /*isStdout*/) {
 	if (g_csharplm._provider)
-		g_csharplm._provider->Log(std::format("[csharplm] {}", message), Severity::Error);
+		g_csharplm._provider->Log(std::format(LOG_PREFIX "{}", message), Severity::Error);
 }
 
 /*_________________________________________________*/

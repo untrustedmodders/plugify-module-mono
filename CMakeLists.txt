@@ -111,4 +111,30 @@ include(GenerateExportHeader)
 generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE CSHARPLM_PLATFORM="${CSHARPLM_PLATFORM}")
+include(CheckCXXSourceCompiles)
+
+macro(check_cxx_compiler_attribute _ATTRIBUTE _RESULT)
+	check_cxx_source_compiles("${_ATTRIBUTE} int somefunc() { return 0; }
+    int main() { return somefunc(); }" ${_RESULT}
+			# Some compilers do not fail with a bad flag
+			FAIL_REGEX "unrecognized .*option"                     # GNU
+			FAIL_REGEX "ignoring unknown option"                   # MSVC
+			FAIL_REGEX "warning D9002"                             # MSVC, any lang
+	)
+endmacro()
+
+check_cxx_compiler_attribute("__attribute__((__always_inline__))" HAVE_ATTR_INLINE)
+#check_cxx_compiler_attribute("__attribute__((noinline))" HAVE_ATTR_NOINLINE)
+
+if(HAVE_ATTR_INLINE)
+	set(CSHARPLM_INLINE "inline __attribute__((__always_inline__))")
+elseif(MSVC)
+	set(CSHARPLM_INLINE "__forceinline")
+else()
+	set(CSHARPLM_INLINE "inline")
+endif()
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+		CSHARPLM_PLATFORM="${CSHARPLM_PLATFORM}"
+		CSHARPLM_INLINE=${CSHARPLM_INLINE}
+)
