@@ -2502,7 +2502,7 @@ ScriptOpt CSharpLanguageModule::FindScript(const std::string& name) {
 }
 
 MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Method& method) {
-	auto& delegateClasses = method.retType.type != ValueType::Void ? _funcClasses : _actionClasses;
+	const auto& delegateClasses = method.retType.type != ValueType::Void ? _funcClasses : _actionClasses;
 
 	size_t paramCount = method.paramTypes.size();
 	if (paramCount >= delegateClasses.size()) {
@@ -2510,7 +2510,7 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 		return nullptr;
 	}
 
-	MonoClass* delegateClass = method.retType.type != ValueType::Void ? _funcClasses[paramCount] : _actionClasses[paramCount];
+	MonoClass* delegateClass = delegateClasses[paramCount];
 
 	if (utils::IsMethodPrimitive(method)) {
 		return mono_ftnptr_to_delegate(delegateClass, func);
