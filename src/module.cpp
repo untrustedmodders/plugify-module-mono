@@ -48,7 +48,6 @@ struct _MonoDelegate {
 
 using namespace csharplm;
 using namespace plugify;
-using namespace std::string_literals;
 
 namespace csharplm::utils {
 	std::string ReadText(const fs::path& filepath) {
@@ -73,43 +72,6 @@ namespace csharplm::utils {
 
 		if (status != MONO_IMAGE_OK)
 			return nullptr;
-
-		/*for (int i = 0; i < mono_image_get_table_rows(image, MONO_TABLE_ASSEMBLYREF); ++i) {
-			mono_assembly_load_reference(image, i);
-
-			MonoAssemblyName* aname = g_csharplm.GetAssemblyName();
-			mono_assembly_get_assemblyref(image, i, aname);
-
-			MonoAssembly* assembly = mono_assembly_loaded(aname);
-			if (!assembly) {
-				std::error_code error;
-				std::string_view name = mono_assembly_name_get_name(aname);
-				bool hasExtension = name.ends_with(".dll") || name.ends_with(".exe");
-				fs::path refPath(assemblyPath.parent_path() / name);
-				if (hasExtension) {
-					if (fs::exists(refPath, error)) {
-						LoadMonoAssembly(refPath, loadPDB, status);
-						if (status != MONO_IMAGE_OK)
-							break;
-					}
-				} else {
-					refPath += ".dll";
-					if (fs::exists(refPath, error)) {
-						LoadMonoAssembly(refPath, loadPDB, status);
-						if (status == MONO_IMAGE_OK)
-							continue;
-					}
-
-					refPath.replace_extension(".exe");
-					if (fs::exists(refPath, error)) {
-						LoadMonoAssembly(refPath, loadPDB, status);
-						if (status != MONO_IMAGE_OK)
-							break;
-					}
-					// If ref not load ?
-				}
-			}
-		}*/
 
 		if (loadPDB) {
 			fs::path pdbPath(assemblyPath);
@@ -265,18 +227,43 @@ namespace csharplm::utils {
 		if (klass != nullptr) storage.push_back(klass);
 	}
 
-	ClassInfo LoadCoreClass(std::vector<std::string>& classErrors, MonoImage* image, const char* name, int paramCount) {
+	ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, const char* name, int paramCount) {
 		MonoClass* klass = mono_class_from_name(image, "Plugify", name);
 		if (!klass) {
-			classErrors.emplace_back(name);
+			errors.emplace_back(name);
 			return {};
 		}
 		MonoMethod* ctor = mono_class_get_method_from_name(klass, ".ctor", paramCount);
 		if (!ctor) {
-			classErrors.emplace_back(name + "::ctor"s);
+			errors.emplace_back(std::format("{}::ctor", name));
 			return {};
 		}
 		return { klass, ctor };
+	}
+
+	AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& assemblyPath, bool loadPDB) {
+		std::error_code error;
+
+		if (!fs::exists(assemblyPath, error)) {
+			errors.emplace_back(assemblyPath.string());
+			return {};
+		}
+
+		MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+
+		MonoAssembly* assembly = utils::LoadMonoAssembly(assemblyPath, loadPDB, status);
+		if (!assembly) {
+			errors.emplace_back(std::format("{} [{}]", assemblyPath.filename().string(), mono_image_strerror(status)));
+			return {};
+		}
+
+		MonoImage* image = mono_assembly_get_image(assembly);
+		if (!image) {
+			errors.emplace_back(std::format("{}::image", assemblyPath.filename().string()));
+			return {};
+		}
+
+		return { assembly, image };
 	}
 
 	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
@@ -338,11 +325,6 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_settings = std::move(*settings);
 
 	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM "/mono/");
-	
-	std::error_code error;
-	if (!fs::exists(monoPath, error))
-		return ErrorData{ std::format("Path to mono assemblies not exist '{}'", monoPath.string()) };
-
 	fs::path configPath(module.GetBaseDir() / "config");
 
 	if (!InitMono(monoPath, configPath))
@@ -357,35 +339,34 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_appDomain = mono_domain_create_appdomain(appName, nullptr);
 	mono_domain_set(_appDomain, true);
 
-	fs::path coreAssemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
+	std::vector<std::string> assemblyErrors;
 
-	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+	{
+		_core = utils::LoadCoreAssembly(assemblyErrors, module.GetBaseDir() / "bin/Plugify.dll", _settings.enableDebugging);
 
-	// Load a core assembly
-	_core.assembly = utils::LoadMonoAssembly(coreAssemblyPath, _settings.enableDebugging, status);
-	if (!_core.assembly)
-		return ErrorData{std::format("Failed to load '{}' assembly. Reason: {}", coreAssemblyPath.string(), mono_image_strerror(status))};
-
-	_core.image = mono_assembly_get_image(_core.assembly);
-	if (!_core.image)
-		return ErrorData{std::format("Failed to load '{}' image.", coreAssemblyPath.string())};
-
-	// Retrieve and cache core classes/methods
-
-	std::vector<std::string> classErrors;
-
-	_plugin = utils::LoadCoreClass(classErrors, _core.image, "Plugin", 8);
-	_vector2 = utils::LoadCoreClass(classErrors, _core.image, "Vector2", 2);
-	_vector3 = utils::LoadCoreClass(classErrors, _core.image, "Vector3", 3);
-	_vector4 = utils::LoadCoreClass(classErrors, _core.image, "Vector4", 4);
-	_matrix4x4 = utils::LoadCoreClass(classErrors, _core.image, "Matrix4x4", 16);
-
-	if (!classErrors.empty()) {
-		std::string funcs("Not found: " + classErrors[0]);
-		for (auto it = std::next(classErrors.begin()); it != classErrors.end(); ++it) {
-			std::format_to(std::back_inserter(funcs), ", {}", *it);
+		if (!assemblyErrors.empty()) {
+			std::string assemblies("Not found: " + assemblyErrors[0]);
+			for (auto it = std::next(assemblyErrors.begin()); it != assemblyErrors.end(); ++it) {
+				std::format_to(std::back_inserter(assemblies), ", {}", *it);
+			}
+			return ErrorData{ std::move(assemblies) };
 		}
-		return ErrorData{ std::move(funcs) };
+	}
+
+	{
+		_plugin = utils::LoadCoreClass(assemblyErrors, _core.image, "Plugin", 8);
+		_vector2 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
+		_vector3 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
+		_vector4 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
+		_matrix4x4 = utils::LoadCoreClass(assemblyErrors, _core.image, "Matrix4x4", 16);
+
+		if (!assemblyErrors.empty()) {
+			std::string classes("Not found: " + assemblyErrors[0]);
+			for (auto it = std::next(assemblyErrors.begin()); it != assemblyErrors.end(); ++it) {
+				std::format_to(std::back_inserter(classes), ", {}", *it);
+			}
+			return ErrorData{ std::move(classes) };
+		}
 	}
 
 	/// Delegates
@@ -478,11 +459,13 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 
 	std::error_code error;
 	std::string monoEnvPath(utils::GetEnvVariable("MONO_PATH"));
-	for (const auto& entry : fs::directory_iterator(monoPath, error)) {
-		if (entry.is_directory(error)) {
-			fs::path path(entry.path());
-			path.make_preferred();
-			std::format_to(std::back_inserter(monoEnvPath), PATH_SEPARATOR "{}", path.string());
+	if (fs::exists(monoPath, error)) {
+		for (const auto& entry : fs::directory_iterator(monoPath, error)) {
+			if (entry.is_directory(error)) {
+				fs::path path(entry.path());
+				path.make_preferred();
+				std::format_to(std::back_inserter(monoEnvPath), PATH_SEPARATOR "{}", path.string());
+			}
 		}
 	}
 	//utils::SetEnvVariable("MONO_PATH", monoEnvPath.c_str());
