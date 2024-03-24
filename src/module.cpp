@@ -21,6 +21,10 @@
 
 #include <glaze/glaze.hpp>
 
+#if CSHARPLM_PLATFORM_WINDOWS
+#include <windows.h>
+#endif
+
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
 MONO_API void* mono_delegate_to_ftnptr(MonoDelegate* delegate);
 MONO_API const void* mono_lookup_internal_call_full(MonoMethod* method, int warn_on_missing, mono_bool* uses_handles, mono_bool* foreign);
@@ -34,7 +38,13 @@ struct _MonoDelegate {
 	//....
 };
 
-#define LOG_PREFIX "[csharplm] "
+#define LOG_PREFIX "[CSHARPLM] "
+
+#if CSHARPLM_PLATFORM_WINDOWS
+#define PATH_SEPARATOR ";"
+#else
+#define PATH_SEPARATOR ":"
+#endif
 
 using namespace csharplm;
 using namespace plugify;
@@ -64,7 +74,7 @@ namespace csharplm::utils {
 		if (status != MONO_IMAGE_OK)
 			return nullptr;
 
-		for (int i = 0; i < mono_image_get_table_rows(image, MONO_TABLE_ASSEMBLYREF); ++i) {
+		/*for (int i = 0; i < mono_image_get_table_rows(image, MONO_TABLE_ASSEMBLYREF); ++i) {
 			mono_assembly_load_reference(image, i);
 
 			MonoAssemblyName* aname = g_csharplm.GetAssemblyName();
@@ -99,7 +109,7 @@ namespace csharplm::utils {
 					// If ref not load ?
 				}
 			}
-		}
+		}*/
 
 		if (loadPDB) {
 			fs::path pdbPath(assemblyPath);
@@ -287,6 +297,30 @@ namespace csharplm::utils {
 
 		return output;
 	}
+
+#if CSHARPLM_PLATFORM_WINDOWS
+	std::string GetEnvVariable(const char* varName) {
+		DWORD size = GetEnvironmentVariableA(varName, NULL, 0);
+		std::string buffer(size, 0);
+		GetEnvironmentVariableA(varName, buffer.data(), size);
+		return buffer;
+	}
+
+	bool SetEnvVariable(const char* varName, const char* value) {
+		return SetEnvironmentVariableA(varName, value) != 0;
+	}
+#else
+	std::string GetEnvVariable(const char* varName) {
+		char* val = getenv(varName);
+		if (!val)
+			return {};
+		return val;
+	}
+
+	bool SetEnvVariable(const char* varName, const char* value) {
+		return setenv(varName, value, 1) == 0;
+	}
+#endif
 }
 
 void FunctionRefQueueCallback(void* function) {
@@ -303,7 +337,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		return ErrorData{ std::format("MonoSettings: 'settings.json' has JSON parsing error: {}", glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
-	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM);
+	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM "/mono/");
 	
 	std::error_code error;
 	if (!fs::exists(monoPath, error))
@@ -442,23 +476,36 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 	mono_trace_set_printerr_handler(OnPrintErrorCallback);
 	mono_trace_set_log_handler(OnLogCallback, nullptr);
 
-	mono_set_assemblies_path(monoPath.string().c_str());
+	std::error_code error;
+	std::string monoEnvPath(utils::GetEnvVariable("MONO_PATH"));
+	for (const auto& entry : fs::directory_iterator(monoPath, error)) {
+		if (entry.is_directory(error)) {
+			fs::path path(entry.path());
+			path.make_preferred();
+			std::format_to(std::back_inserter(monoEnvPath), PATH_SEPARATOR "{}", path.string());
+		}
+	}
+	//utils::SetEnvVariable("MONO_PATH", monoEnvPath.c_str());
+	mono_set_assemblies_path(monoEnvPath.c_str());
 
 	// Seems we can write custom assembly loader here
 	//mono_install_assembly_preload_hook(OnMonoAssemblyPreloadHook, nullptr);
 
-	if (_settings.enableDebugging && !_settings.options.empty()) {
-		std::vector<char*> options;
-		options.reserve(_settings.options.size());
-		for (auto& opt: _settings.options) {
-			if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
-				if (opt.starts_with("--debugger")) {
-					_provider->Log(std::format(LOG_PREFIX "Mono debugger: {}", opt), Severity::Info);
+	if (_settings.enableDebugging) {
+		if (!_settings.options.empty()) {
+			std::vector<char*> options;
+			options.reserve(_settings.options.size());
+			for (auto& opt: _settings.options) {
+				if (std::find(options.begin(), options.end(), opt.data()) == options.end()) {
+					if (opt.starts_with("--debugger")) {
+						_provider->Log(std::format(LOG_PREFIX "Mono debugger: {}", opt), Severity::Info);
+					}
+					options.push_back(opt.data());
 				}
-				options.push_back(opt.data());
 			}
+			mono_jit_parse_options(static_cast<int>(options.size()), options.data());
 		}
-		mono_jit_parse_options(static_cast<int>(options.size()), options.data());
+		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
 	}
 
 	if (!_settings.level.empty())
@@ -466,7 +513,6 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 	if (!_settings.mask.empty())
 		mono_trace_set_mask_string(_settings.mask.c_str());
 
-	std::error_code error;
 	mono_config_parse(fs::exists(configPath, error) ? configPath.string().c_str() : nullptr);
 
 	_rootDomain = mono_jit_init("PlugifyJITRuntime");
@@ -475,7 +521,6 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 
 	if (_settings.enableDebugging) {
 		mono_debug_domain_create(_rootDomain);
-		mono_debug_init(MONO_DEBUG_FORMAT_MONO);
 	}
 
 	mono_thread_set_main(mono_thread_current());
