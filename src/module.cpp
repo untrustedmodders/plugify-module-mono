@@ -213,11 +213,13 @@ namespace csharplm::utils {
 	}
 
 	bool IsMethodPrimitive(const plugify::Method& method) {
-		if (method.retType.type >= ValueType::LastPrimitive)
+		// char8 is exception among primitive types
+		
+		if (method.retType.type == ValueType::Char8 || method.retType.type >= ValueType::LastPrimitive)
 			return false;
 
 		for (const auto& param : method.paramTypes) {
-			if (param.type >= ValueType::LastPrimitive && param.type < ValueType::FirstPOD)
+			if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive && param.type < ValueType::FirstPOD))
 				return false;
 		}
 
