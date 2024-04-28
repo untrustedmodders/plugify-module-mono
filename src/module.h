@@ -124,7 +124,7 @@ namespace csharplm {
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
-		bool InitMono(const fs::path& monoPath, const fs::path& configPath);
+		bool InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath);
 		void ShutdownMono();
 
 		ScriptOpt CreateScriptInstance(const plugify::IPlugin& plugin, MonoImage* image);

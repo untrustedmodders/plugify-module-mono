@@ -23,6 +23,7 @@
 
 #if CSHARPLM_PLATFORM_WINDOWS
 #include <windows.h>
+#undef FindResource
 #endif
 
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
@@ -322,14 +323,20 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	auto json = utils::ReadText(module.GetBaseDir() / "settings.json");
+	const char* settingsFile = "configs/csharp-lang-module.json";
+
+	auto settingsPath = module.FindResource(settingsFile);
+	if (!settingsPath.has_value())
+		return ErrorData{ std::format("File '{}' has not been found", settingsFile) };
+
+	auto json = utils::ReadText(*settingsPath);
 	auto settings = glz::read_json<MonoSettings>(json);
 	if (!settings.has_value())
-		return ErrorData{ std::format("MonoSettings: 'settings.json' has JSON parsing error: {}", glz::format_error(settings.error(), json)) };
+		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile, glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
 	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM "/mono/");
-	fs::path configPath(module.GetBaseDir() / "config");
+	auto configPath = module.FindResource("configs/mono_config");
 
 	if (!InitMono(monoPath, configPath))
 		return ErrorData{ "Initialization of mono failed" };
@@ -346,7 +353,9 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	std::vector<std::string> assemblyErrors;
 
 	{
-		_core = utils::LoadCoreAssembly(assemblyErrors, module.GetBaseDir() / "bin/Plugify.dll", _settings.enableDebugging);
+		fs::path assemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
+
+		_core = utils::LoadCoreAssembly(assemblyErrors, assemblyPath, _settings.enableDebugging);
 
 		if (!assemblyErrors.empty()) {
 			std::string assemblies("Not found: " + assemblyErrors[0]);
@@ -456,7 +465,7 @@ void CSharpLanguageModule::Shutdown() {
 	return OnMonoAssemblyLoad(mono_assembly_name_get_name(aname));
 }*/
 
-bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& configPath) {
+bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath) {
 	mono_trace_set_print_handler(OnPrintCallback);
 	mono_trace_set_printerr_handler(OnPrintErrorCallback);
 	mono_trace_set_log_handler(OnLogCallback, nullptr);
@@ -500,7 +509,7 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const fs::path& co
 	if (!_settings.mask.empty())
 		mono_trace_set_mask_string(_settings.mask.c_str());
 
-	mono_config_parse(fs::exists(configPath, error) ? configPath.string().c_str() : nullptr);
+	mono_config_parse(configPath.has_value() ? configPath->string().c_str() : nullptr);
 
 	_rootDomain = mono_jit_init("PlugifyJITRuntime");
 	if (!_rootDomain)
@@ -808,6 +817,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::Void:
 					break;
 				case ValueType::Bool:
+				case ValueType::Char8:
 				case ValueType::Char16:
 				case ValueType::Int8:
 				case ValueType::Int16:
@@ -825,9 +835,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::Vector4:
 				case ValueType::Matrix4x4:
 					dcArgPointer(vm, p->GetArgumentPtr(i));
-					break;
-				case ValueType::Char8:
-					dcArgPointer(vm, reinterpret_cast<char*>(p->GetArgumentPtr(i)) + 1); // should work on little-endian on ANSI char16_t
 					break;
 				// MonoDelegate*
 				case ValueType::Function:
