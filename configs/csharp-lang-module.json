@@ -1,0 +1,9 @@
+{
+	"enableDebugging": true,
+  	"level": "warning",
+	"mask": "",
+	"options": [
+	  	"--debugger-agent=transport=dt_socket,address=127.0.0.1:2550,embedding=1,server=y,suspend=n,loglevel=3,logfile=MonoDebugger.log",
+		"--soft-breakpoints"
+	]
+}
