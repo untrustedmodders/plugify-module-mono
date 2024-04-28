@@ -1311,7 +1311,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 			case ValueType::Void:
 			case ValueType::Char8:
 			case ValueType::ArrayChar8:
-				// Should not trigger!
+				// Should not trigger as we cannot export function with char8 from c#
 				break;
 			case ValueType::Bool:
 			case ValueType::Char16:
@@ -1803,7 +1803,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 			case ValueType::Void:
 			case ValueType::Char8:
 			case ValueType::ArrayChar8:
-				// Should not trigger!
+				// Should not trigger as we cannot export function with char8 from c#
 				break;
 			case ValueType::Bool:
 			case ValueType::Char16:
