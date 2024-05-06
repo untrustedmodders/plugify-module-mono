@@ -2,6 +2,7 @@
 .idea
 .vscode
 .vs
+*.DotSettings.user
 
 # CMake
 CMakeUserPresets.json
