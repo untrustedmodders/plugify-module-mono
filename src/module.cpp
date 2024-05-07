@@ -244,9 +244,7 @@ namespace csharplm::utils {
 		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
 		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
 		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
-		if (messageString != nullptr)
-			return MonoStringToUTF8(messageString);
-		return {};
+		return MonoStringToUTF8(messageString);
 	}
 
 	bool IsMethodPrimitive(const plugify::Method& method) {
@@ -349,6 +347,19 @@ namespace csharplm::utils {
 		return setenv(varName, value, 1) == 0;
 	}
 #endif
+
+	template<typename T>
+	void* AllocateMemory(std::vector<void*>& args) {
+		void* ptr = malloc(sizeof(T));
+		args.push_back(ptr);
+		return ptr;
+	}
+
+	template<typename T>
+	void FreeMemory(void* ptr) {
+		reinterpret_cast<T*>(ptr)->~T();
+		free(ptr);
+	}
 }
 
 void FunctionRefQueueCallback(void* function) {
@@ -687,71 +698,69 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 
 	// Store parameters
 
-	// TODO: Do we need initialize return argument ?
-
 	if (hasRet) {
 		switch (method->retType.type) {
 			case ValueType::Vector2:
-				dcArgPointer(vm, MonoStructToArg<plugify::Vector2>(args));
+				dcArgPointer(vm, utils::AllocateMemory<plugify::Vector2>(args));
 				break;
 			case ValueType::Vector3:
-				dcArgPointer(vm, MonoStructToArg<plugify::Vector3>(args));
+				dcArgPointer(vm, utils::AllocateMemory<plugify::Vector3>(args));
 				break;
 			case ValueType::Vector4:
-				dcArgPointer(vm, MonoStructToArg<plugify::Vector4>(args));
+				dcArgPointer(vm, utils::AllocateMemory<plugify::Vector4>(args));
 				break;
 			case ValueType::Matrix4x4:
-				dcArgPointer(vm, MonoStructToArg<plugify::Matrix4x4>(args));
+				dcArgPointer(vm, utils::AllocateMemory<plugify::Matrix4x4>(args));
 				break;
 			// MonoString*
 			case ValueType::String:
-				dcArgPointer(vm, MonoStringToArg(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::string>(args));
 				break;
 			// MonoArray*
 			case ValueType::ArrayBool:
-				dcArgPointer(vm, MonoArrayToArg<bool>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<bool>>(args));
 				break;
 			case ValueType::ArrayChar8:
-				dcArgPointer(vm, MonoArrayToArg<char>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<char>>(args));
 				break;
 			case ValueType::ArrayChar16:
-				dcArgPointer(vm, MonoArrayToArg<char16_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<char16_t>>(args));
 				break;
 			case ValueType::ArrayInt8:
-				dcArgPointer(vm, MonoArrayToArg<int8_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<int8_t>>(args));
 				break;
 			case ValueType::ArrayInt16:
-				dcArgPointer(vm, MonoArrayToArg<int16_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<int16_t>>(args));
 				break;
 			case ValueType::ArrayInt32:
-				dcArgPointer(vm, MonoArrayToArg<int32_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<int32_t>>(args));
 				break;
 			case ValueType::ArrayInt64:
-				dcArgPointer(vm, MonoArrayToArg<int64_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<int64_t>>(args));
 				break;
 			case ValueType::ArrayUInt8:
-				dcArgPointer(vm, MonoArrayToArg<uint8_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<uint8_t>>(args));
 				break;
 			case ValueType::ArrayUInt16:
-				dcArgPointer(vm, MonoArrayToArg<uint16_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<uint16_t>>(args));
 				break;
 			case ValueType::ArrayUInt32:
-				dcArgPointer(vm, MonoArrayToArg<uint32_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<uint32_t>>(args));
 				break;
 			case ValueType::ArrayUInt64:
-				dcArgPointer(vm, MonoArrayToArg<uint64_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<uint64_t>>(args));
 				break;
 			case ValueType::ArrayPtr64:
-				dcArgPointer(vm, MonoArrayToArg<uintptr_t>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<uintptr_t>>(args));
 				break;
 			case ValueType::ArrayFloat:
-				dcArgPointer(vm, MonoArrayToArg<float>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<float>>(args));
 				break;
 			case ValueType::ArrayDouble:
-				dcArgPointer(vm, MonoArrayToArg<double>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<double>>(args));
 				break;
 			case ValueType::ArrayString:
-				dcArgPointer(vm, MonoArrayToArg<std::string>(nullptr, args));
+				dcArgPointer(vm, utils::AllocateMemory<std::vector<std::string>>(args));
 				break;
 			default:
 				// Should not require storage
@@ -2076,83 +2085,83 @@ void CSharpLanguageModule::DeleteParam(const std::vector<void*>& args, uint8_t& 
 void CSharpLanguageModule::DeleteReturn(const std::vector<void*>& args, uint8_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::Vector2: {
-			delete reinterpret_cast<plugify::Vector2*>(args[i++]);
+			utils::FreeMemory<plugify::Vector2>(args[i++]);
 			break;
 		}
 		case ValueType::Vector3: {
-			delete reinterpret_cast<plugify::Vector3*>(args[i++]);
+			utils::FreeMemory<plugify::Vector3>(args[i++]);
 			break;
 		}
 		case ValueType::Vector4: {
-			delete reinterpret_cast<plugify::Vector4*>(args[i++]);
+			utils::FreeMemory<plugify::Vector4>(args[i++]);
 			break;
 		}
 		case ValueType::Matrix4x4: {
-			delete reinterpret_cast<plugify::Matrix4x4*>(args[i++]);
+			utils::FreeMemory<plugify::Matrix4x4>(args[i++]);
 			break;
 		}
 		case ValueType::String: {
-			delete reinterpret_cast<std::string*>(args[i++]);
+			utils::FreeMemory<std::string>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayBool: {
-			delete reinterpret_cast<std::vector<bool>*>(args[i++]);
+			utils::FreeMemory<std::vector<bool>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayChar8: {
-			delete reinterpret_cast<std::vector<char>*>(args[i++]);
+			utils::FreeMemory<std::vector<char>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayChar16: {
-			delete reinterpret_cast<std::vector<char16_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<char16_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt8: {
-			delete reinterpret_cast<std::vector<int16_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<int16_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt16: {
-			delete reinterpret_cast<std::vector<int16_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<int16_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt32: {
-			delete reinterpret_cast<std::vector<int32_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<int32_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayInt64: {
-			delete reinterpret_cast<std::vector<int64_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<int64_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayUInt8: {
-			delete reinterpret_cast<std::vector<uint8_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<uint8_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayUInt16: {
-			delete reinterpret_cast<std::vector<uint16_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<uint16_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayUInt32: {
-			delete reinterpret_cast<std::vector<uint32_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<uint32_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayUInt64: {
-			delete reinterpret_cast<std::vector<uint64_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<uint64_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayPtr64: {
-			delete reinterpret_cast<std::vector<uintptr_t>*>(args[i++]);
+			utils::FreeMemory<std::vector<uintptr_t>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayFloat: {
-			delete reinterpret_cast<std::vector<float>*>(args[i++]);
+			utils::FreeMemory<std::vector<float>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayDouble: {
-			delete reinterpret_cast<std::vector<double>*>(args[i++]);
+			utils::FreeMemory<std::vector<double>>(args[i++]);
 			break;
 		}
 		case ValueType::ArrayString: {
-			delete reinterpret_cast<std::vector<std::string>*>(args[i++]);
+			utils::FreeMemory<std::vector<std::string>>(args[i++]);
 			break;
 		}
 		default: {
