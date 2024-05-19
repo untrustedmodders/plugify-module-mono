@@ -136,8 +136,8 @@ namespace csharplm::utils {
 				{ "System.UInt16", ValueType::UInt16 },
 				{ "System.UInt32", ValueType::UInt32 },
 				{ "System.UInt64", ValueType::UInt64 },
-				{ "System.IntPtr", ValueType::Ptr64 },
-				{ "System.UIntPtr", ValueType::Ptr64 },
+				{ "System.IntPtr", ValueType::Pointer },
+				{ "System.UIntPtr", ValueType::Pointer },
 				{ "System.Single", ValueType::Float },
 				{ "System.Double", ValueType::Double },
 				{ "System.String", ValueType::String },
@@ -151,8 +151,8 @@ namespace csharplm::utils {
 				{ "System.UInt16[]", ValueType::ArrayUInt16 },
 				{ "System.UInt32[]", ValueType::ArrayUInt32 },
 				{ "System.UInt64[]", ValueType::ArrayUInt64 },
-				{ "System.IntPtr[]", ValueType::ArrayPtr64 },
-				{ "System.UIntPtr[]", ValueType::ArrayPtr64 },
+				{ "System.IntPtr[]", ValueType::ArrayPointer },
+				{ "System.UIntPtr[]", ValueType::ArrayPointer },
 				{ "System.Single[]", ValueType::ArrayFloat },
 				{ "System.Double[]", ValueType::ArrayDouble },
 				{ "System.String[]", ValueType::ArrayString },
@@ -167,8 +167,8 @@ namespace csharplm::utils {
 				{ "System.UInt16&", ValueType::UInt16 },
 				{ "System.UInt32&", ValueType::UInt32 },
 				{ "System.UInt64&", ValueType::UInt64 },
-				{ "System.IntPtr&", ValueType::Ptr64 },
-				{ "System.UIntPtr&", ValueType::Ptr64 },
+				{ "System.IntPtr&", ValueType::Pointer },
+				{ "System.UIntPtr&", ValueType::Pointer },
 				{ "System.Single&", ValueType::Float },
 				{ "System.Double&", ValueType::Double },
 				{ "System.String&", ValueType::String },
@@ -182,8 +182,8 @@ namespace csharplm::utils {
 				{ "System.UInt16[]&", ValueType::ArrayUInt16 },
 				{ "System.UInt32[]&", ValueType::ArrayUInt32 },
 				{ "System.UInt64[]&", ValueType::ArrayUInt64 },
-				{ "System.IntPtr[]&", ValueType::ArrayPtr64 },
-				{ "System.UIntPtr[]&", ValueType::ArrayPtr64 },
+				{ "System.IntPtr[]&", ValueType::ArrayPointer },
+				{ "System.UIntPtr[]&", ValueType::ArrayPointer },
 				{ "System.Single[]&", ValueType::ArrayFloat },
 				{ "System.Double[]&", ValueType::ArrayDouble },
 				{ "System.String[]&", ValueType::ArrayString },
@@ -750,7 +750,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			case ValueType::ArrayUInt64:
 				dcArgPointer(vm, utils::AllocateMemory<std::vector<uint64_t>>(args));
 				break;
-			case ValueType::ArrayPtr64:
+			case ValueType::ArrayPointer:
 				dcArgPointer(vm, utils::AllocateMemory<std::vector<uintptr_t>>(args));
 				break;
 			case ValueType::ArrayFloat:
@@ -808,7 +808,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::UInt64:
 					dcArgPointer(vm, p->GetArgument<uint64_t*>(i));
 					break;
-				case ValueType::Ptr64:
+				case ValueType::Pointer:
 					dcArgPointer(vm, p->GetArgument<void*>(i));
 					break;
 				case ValueType::Float:
@@ -871,7 +871,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::ArrayUInt64:
 					dcArgPointer(vm, MonoArrayToArg<uint64_t>(*p->GetArgument<MonoArray**>(i), args));
 					break;
-				case ValueType::ArrayPtr64:
+				case ValueType::ArrayPointer:
 					dcArgPointer(vm, MonoArrayToArg<uintptr_t>(*p->GetArgument<MonoArray**>(i), args));
 					break;
 				case ValueType::ArrayFloat:
@@ -917,7 +917,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::UInt64:
 					dcArgLongLong(vm, p->GetArgument<int64_t>(i));
 					break;
-				case ValueType::Ptr64:
+				case ValueType::Pointer:
 					dcArgPointer(vm, p->GetArgument<void*>(i));
 					break;
 				case ValueType::Float:
@@ -984,7 +984,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 				case ValueType::ArrayUInt64:
 					dcArgPointer(vm, MonoArrayToArg<uint64_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
-				case ValueType::ArrayPtr64:
+				case ValueType::ArrayPointer:
 					dcArgPointer(vm, MonoArrayToArg<uintptr_t>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayFloat:
@@ -1069,7 +1069,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			ret->SetReturnPtr(val);
 			break;
 		}
-		case ValueType::Ptr64: {
+		case ValueType::Pointer: {
 			void* val = dcCallPointer(vm, addr);
 			ret->SetReturnPtr(val);
 			break;
@@ -1169,7 +1169,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			ret->SetReturnPtr(g_csharplm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[0]), mono_get_uint64_class()));
 			break;
 		}
-		case ValueType::ArrayPtr64: {
+		case ValueType::ArrayPointer: {
 			dcCallVoid(vm, addr);
 			ret->SetReturnPtr(g_csharplm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[0]), mono_get_intptr_class()));
 			break;
@@ -1252,7 +1252,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[j++]), mono_get_uint64_class()));
 							break;
 						}
-						case ValueType::ArrayPtr64: {
+						case ValueType::ArrayPointer: {
 							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[j++]), mono_get_intptr_class()));
 							break;
 						}
@@ -1387,7 +1387,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 				case ValueType::UInt64:
 					args[j] = p->GetArgument<uint64_t*>(i);
 					break;
-				case ValueType::Ptr64:
+				case ValueType::Pointer:
 					args[j] = p->GetArgument<void**>(i);
 					break;
 				case ValueType::Float:
@@ -1473,7 +1473,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					args[j] = source != nullptr ? new MonoArray*[1]{ g_csharplm.CreateArrayT<uint64_t>(*source, mono_get_uint64_class()) } : nullptr;
 					break;
 				}
-				case ValueType::ArrayPtr64: {
+				case ValueType::ArrayPointer: {
 					auto source = p->GetArgument<std::vector<uintptr_t>*>(i);
 					args[j] = source != nullptr ? new MonoArray*[1]{ g_csharplm.CreateArrayT<uintptr_t>(*source, mono_get_intptr_class()) } : nullptr;
 					break;
@@ -1512,7 +1512,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 				case ValueType::UInt16:
 				case ValueType::UInt32:
 				case ValueType::UInt64:
-				case ValueType::Ptr64:
+				case ValueType::Pointer:
 				case ValueType::Float:
 				case ValueType::Double:
 					args[j] = p->GetArgumentPtr(i);
@@ -1594,7 +1594,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					args[j] = source != nullptr ? g_csharplm.CreateArrayT<uint64_t>(*source, mono_get_uint64_class()) : nullptr;
 					break;
 				}
-				case ValueType::ArrayPtr64: {
+				case ValueType::ArrayPointer: {
 					auto source = p->GetArgument<std::vector<uintptr_t>*>(i);
 					args[j] = source != nullptr ? g_csharplm.CreateArrayT<uintptr_t>(*source, mono_get_intptr_class()) : nullptr;
 					break;
@@ -1735,7 +1735,7 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 						delete[] source;
 						break;
 					}
-					case ValueType::ArrayPtr64: {
+					case ValueType::ArrayPointer: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
 							auto dest = p->GetArgument<std::vector<uintptr_t>*>(i);
@@ -1843,7 +1843,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 				ret->SetReturnPtr<uint64_t>(val);
 				break;
 			}
-			case ValueType::Ptr64: {
+			case ValueType::Pointer: {
 				uintptr_t val = *reinterpret_cast<uintptr_t*>(mono_object_unbox(result));
 				ret->SetReturnPtr<uintptr_t>(val);
 				break;
@@ -1969,7 +1969,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 				std::construct_at(p->GetArgument<std::vector<uint64_t>*>(0), std::move(dest));
 				break;
 			}
-			case ValueType::ArrayPtr64: {
+			case ValueType::ArrayPointer: {
 				auto source = reinterpret_cast<MonoArray*>(result);
 				std::vector<uintptr_t> dest;
 				utils::MonoArrayToVector(source, dest);
@@ -2060,7 +2060,7 @@ void CSharpLanguageModule::DeleteParam(const std::vector<void*>& args, uint8_t& 
 			delete reinterpret_cast<std::vector<uint64_t>*>(args[i++]);
 			break;
 		}
-		case ValueType::ArrayPtr64: {
+		case ValueType::ArrayPointer: {
 			delete reinterpret_cast<std::vector<uintptr_t>*>(args[i++]);
 			break;
 		}
@@ -2148,7 +2148,7 @@ void CSharpLanguageModule::DeleteReturn(const std::vector<void*>& args, uint8_t&
 			utils::FreeMemory<std::vector<uint64_t>>(args[i++]);
 			break;
 		}
-		case ValueType::ArrayPtr64: {
+		case ValueType::ArrayPointer: {
 			utils::FreeMemory<std::vector<uintptr_t>>(args[i++]);
 			break;
 		}
