@@ -884,7 +884,8 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgPointer(vm, MonoArrayToArg<std::string>(*p->GetArgument<MonoArray**>(i), args));
 					break;
 				default:
-					puts("Unsupported types!\n");
+					std::puts("Unsupported types!\n");
+					std::terminate();
 					break;
 			}
 		} else {
@@ -997,7 +998,8 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgPointer(vm, MonoArrayToArg<std::string>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				default:
-					puts("Unsupported types!\n");
+					std::puts("Unsupported types!\n");
+					std::terminate();
 					break;
 			}
 		}
@@ -1190,7 +1192,8 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		default:
-			puts("Unsupported types!\n");
+			std::puts("Unsupported types!\n");
+			std::terminate();
 			break;
 	}
 
@@ -2427,7 +2430,7 @@ MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, Mono
 	MonoArray* array = CreateArray(klass, source.size());
 	for (size_t i = 0; i < source.size(); ++i) {
 		if constexpr (std::is_same_v<T, char>) {
-			mono_array_set(array, wchar_t, i, static_cast<wchar_t>(source[i]));
+			mono_array_set(array, char16_t, i, static_cast<char16_t>(source[i]));
 		} else {
 			mono_array_set(array, T, i, source[i]);
 		}
