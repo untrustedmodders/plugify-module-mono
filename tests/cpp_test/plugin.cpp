@@ -2,97 +2,61 @@
 #include <plugin_export.h>
 #include <test/test.h>
 #include <pps/CSharpTest.h>
+#include <cassert>
 
 class CppTestPlugin : public plugify::IPluginEntry {
 public:
     void OnPluginStart() override {
         // No Params, Only Return
         {
-            std::cout << "==========================================================================" << std::endl;
+            std::cout << "=================================C++=======================================" << std::endl;
 
-            NoParamReturnVoid();
-
-            PrintReturnValue("NoParamReturnBool", CSharpTest::NoParamReturnBool());
-
-            PrintReturnValue("NoParamReturnChar16", CSharpTest::NoParamReturnChar16());
-
-            PrintReturnValue("NoParamReturnInt8", CSharpTest::NoParamReturnInt8());
-
-            PrintReturnValue("NoParamReturnInt16", CSharpTest::NoParamReturnInt16());
-
-            PrintReturnValue("NoParamReturnInt32", CSharpTest::NoParamReturnInt32());
-
-            PrintReturnValue("NoParamReturnInt64", CSharpTest::NoParamReturnInt64());
-
-            PrintReturnValue("NoParamReturnUInt8", CSharpTest::NoParamReturnUInt8());
-
-            PrintReturnValue("NoParamReturnUInt16", CSharpTest::NoParamReturnUInt16());
-
-            PrintReturnValue("NoParamReturnUInt32", CSharpTest::NoParamReturnUInt32());
-
-            PrintReturnValue("NoParamReturnUInt64", CSharpTest::NoParamReturnUInt64());
-
-            PrintReturnValue("NoParamReturnPtr64", CSharpTest::NoParamReturnPtr64());
-
-            PrintReturnValue("NoParamReturnFloat", CSharpTest::NoParamReturnFloat());
-
-            PrintReturnValue("NoParamReturnDouble", CSharpTest::NoParamReturnDouble());
-
-            PrintReturnValue("NoParamReturnFunction", CSharpTest::NoParamReturnFunction());
-
-            // std::string
-            PrintReturnValue("NoParamReturnString", CSharpTest::NoParamReturnString());
-
-            // std::vector
-            PrintReturnArray("NoParamReturnArrayBool", CSharpTest::NoParamReturnArrayBool());
-
-            PrintReturnArray("NoParamReturnArrayChar16", CSharpTest::NoParamReturnArrayChar16());
-
-            PrintReturnArray("NoParamReturnArrayInt8", CSharpTest::NoParamReturnArrayInt8());
-
-            PrintReturnArray("NoParamReturnArrayInt16", CSharpTest::NoParamReturnArrayInt16());
-
-            PrintReturnArray("NoParamReturnArrayInt32", CSharpTest::NoParamReturnArrayInt32());
-
-            PrintReturnArray("NoParamReturnArrayInt64", CSharpTest::NoParamReturnArrayInt64());
-
-            PrintReturnArray("NoParamReturnArrayUInt8", CSharpTest::NoParamReturnArrayUInt8());
-
-            PrintReturnArray("NoParamReturnArrayUInt16", CSharpTest::NoParamReturnArrayUInt16());
-
-            PrintReturnArray("NoParamReturnArrayUInt32", CSharpTest::NoParamReturnArrayUInt32());
-
-            PrintReturnArray("NoParamReturnArrayUInt64", CSharpTest::NoParamReturnArrayUInt64());
-
-            PrintReturnArray("NoParamReturnArrayPtr64", CSharpTest::NoParamReturnArrayPtr64());
-
-            PrintReturnArray("NoParamReturnArrayFloat", CSharpTest::NoParamReturnArrayFloat());
-
-            PrintReturnArray("NoParamReturnArrayDouble", CSharpTest::NoParamReturnArrayDouble());
-
-            PrintReturnArray("NoParamReturnArrayString", CSharpTest::NoParamReturnArrayString());
-
-            // glm:vec
-            //PrintReturnValue("NoParamReturnVector2", CSharpTest::NoParamReturnVector2());
-
-            //PrintReturnValue("NoParamReturnVector3", CSharpTest::NoParamReturnVector3());
-
-            //PrintReturnValue("NoParamReturnVector4", CSharpTest::NoParamReturnVector4());
-
-            //glm::mat
-           // PrintReturnValue("NoParamReturnMatrix4x4", CSharpTest::NoParamReturnMatrix4x4());
+            CSharpTest::NoParamReturnVoid();
+            assert(CSharpTest::NoParamReturnBool() == true);
+            assert(CSharpTest::NoParamReturnChar16() == std::numeric_limits<char16_t>::max());
+            assert(CSharpTest::NoParamReturnInt8() == std::numeric_limits<int8_t>::max());
+            assert(CSharpTest::NoParamReturnInt16() == std::numeric_limits<int16_t>::max());
+            assert(CSharpTest::NoParamReturnInt32() == std::numeric_limits<int32_t>::max());
+            assert(CSharpTest::NoParamReturnInt64() == std::numeric_limits<int64_t>::max());
+            assert(CSharpTest::NoParamReturnUInt8() == std::numeric_limits<uint8_t>::max());
+            assert(CSharpTest::NoParamReturnUInt16() == std::numeric_limits<uint16_t>::max());
+            assert(CSharpTest::NoParamReturnUInt32() == std::numeric_limits<uint32_t>::max());
+            assert(CSharpTest::NoParamReturnUInt64() == std::numeric_limits<uint64_t>::max());
+            assert(CSharpTest::NoParamReturnPtr64() == reinterpret_cast<void*>(0x1));
+            assert(CSharpTest::NoParamReturnFloat() == std::numeric_limits<float>::max());
+            assert(CSharpTest::NoParamReturnDouble() == std::numeric_limits<double>::max());
+            assert(CSharpTest::NoParamReturnFunction() == nullptr);
+            assert(CSharpTest::NoParamReturnString() == "Hello World");
+            assert((CSharpTest::NoParamReturnArrayBool() == std::vector<bool>{true, false}));
+            assert((CSharpTest::NoParamReturnArrayChar16() == std::vector<char16_t>{u'a', u'b', u'c', u'd'}));
+            assert((CSharpTest::NoParamReturnArrayInt8() == std::vector<int8_t>{-3, -2, -1, 0, 1}));
+            assert((CSharpTest::NoParamReturnArrayInt16() == std::vector<int16_t>{-4, -3, -2, -1, 0, 1}));
+            assert((CSharpTest::NoParamReturnArrayInt32() == std::vector<int32_t>{-5, -4, -3, -2, -1, 0, 1}));
+            assert((CSharpTest::NoParamReturnArrayInt64() == std::vector<int64_t>{-6, -5, -4, -3, -2, -1, 0, 1}));
+            assert((CSharpTest::NoParamReturnArrayUInt8() == std::vector<uint8_t>{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+            assert((CSharpTest::NoParamReturnArrayUInt16() == std::vector<uint16_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+            assert((CSharpTest::NoParamReturnArrayUInt32() == std::vector<uint32_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
+            assert((CSharpTest::NoParamReturnArrayUInt64() == std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}));
+            assert((CSharpTest::NoParamReturnArrayPtr64() == std::vector<void*>{reinterpret_cast<void*>(0), reinterpret_cast<void*>(1), reinterpret_cast<void*>(2), reinterpret_cast<void*>(3)}));
+            assert((CSharpTest::NoParamReturnArrayFloat() == std::vector<float>{-12.34f, 0.0f, 12.34f}));
+            assert((CSharpTest::NoParamReturnArrayDouble() == std::vector<double>{-12.345, 0.0, 12.345}));
+            assert((CSharpTest::NoParamReturnArrayString() == std::vector<std::string>{"1st string", "2nd string", "3rd element string (Should be big enough to avoid small string optimization)"}));
+            //assert((CSharpTest::NoParamReturnVector2() == Vector2(1, 2));
+            //assert((CSharpTest::NoParamReturnVector3() == Vector3(1, 2, 3));
+            //assert((CSharpTest::NoParamReturnVector4() == Vector4(1, 2, 3, 4));
+            //assert((CSharpTest::NoParamReturnMatrix4x4() == Matrix4x4(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16));
         }
 
         int32_t intValue = 42;
         float floatValue = 3.14f;
         double doubleValue = 6.28;
-        plugify::Vector4 vector4Value = plugify::Vector4(1.0f, 2.0f, 3.0f, 4.0f);
+        plugify::Vector4 vector4Value(1.0f, 2.0f, 3.0f, 4.0f);
         std::vector<int64_t> longListValue = { 100, 200, 300 };
         char16_t charValue = 'A';
         std::string stringValue = "Hello";
         float floatValue2 = 2.71f;
         int16_t shortValue = 10;
-        void* ptrValue = 0; // Provide appropriate value for pointer
+        void* ptrValue = nullptr; // Provide appropriate value for pointer
 
         // Params (no refs)
         {
@@ -111,34 +75,78 @@ public:
         // Params (with refs)
         {
             CSharpTest::ParamRef1(intValue);
-            std::cout << "Value after calling ParamRef1: " << intValue << std::endl;
+            assert((intValue == 42));
 
             CSharpTest::ParamRef2(intValue, floatValue);
-            std::cout << "Values after calling ParamRef2: " << intValue << ", " << floatValue << std::endl;
+            assert((intValue == 10));
+            assert((floatValue == 3.14f));
 
             CSharpTest::ParamRef3(intValue, floatValue, doubleValue);
-            std::cout << "Values after calling ParamRef3: " << intValue << ", " << floatValue << ", " << doubleValue << std::endl;
+            assert((intValue == -20));
+            assert((floatValue == 2.718f));
+            assert((doubleValue == 3.14159));
 
             CSharpTest::ParamRef4(intValue, floatValue, doubleValue, vector4Value);
-            std::cout << "Values after calling ParamRef4: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << std::endl;
+            assert((intValue == 100));
+            assert((floatValue == -5.55f));
+            assert((doubleValue == 1.618));
+            assert((vector4Value.x == 1.0f && vector4Value.y == 2.0f && vector4Value.z == 3.0f && vector4Value.w == 4.0f));
 
             CSharpTest::ParamRef5(intValue, floatValue, doubleValue, vector4Value, longListValue);
-            std::cout << "Values after calling ParamRef5: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << ", " << longListValue[0] << std::endl;
+            assert((intValue == 500));
+            assert((floatValue == -10.5f));
+            assert((doubleValue == 2.71828));
+            assert((vector4Value.x == -1.0f && vector4Value.y == -2.0f && vector4Value.z == -3.0f && vector4Value.w == -4.0f));
+            assert((longListValue == std::vector<int64_t>{ -6, -5, -4, -3, -2, -1, 0, 1 }));
 
             CSharpTest::ParamRef6(intValue, floatValue, doubleValue, vector4Value, longListValue, charValue);
-            std::cout << "Values after calling ParamRef6: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << ", " << longListValue[0] << ", " << static_cast<char>(charValue) << std::endl;
+            assert((intValue == 750));
+            assert((floatValue == 20.0f));
+            assert((doubleValue == 1.23456));
+            assert((vector4Value.x == 10.0f && vector4Value.y == 20.0f && vector4Value.z == 30.0f && vector4Value.w == 40.0f));
+            assert((longListValue == std::vector<int64_t>{ -6, -5, -4 }));
+            assert((charValue == 'Z'));
 
             CSharpTest::ParamRef7(intValue, floatValue, doubleValue, vector4Value, longListValue, charValue, stringValue);
-            std::cout << "Values after calling ParamRef7: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << ", " << longListValue[0] << ", " << static_cast<char>(charValue) << ", " << stringValue << std::endl;
+            assert((intValue == -1000));
+            assert((floatValue == 3.0f));
+            assert((doubleValue == -1));
+            assert((vector4Value.x == 100.0f && vector4Value.y == 200.0f && vector4Value.z == 300.0f && vector4Value.w == 400.0f));
+            assert((longListValue == std::vector<int64_t>{ -6, -5, -4, -3 }));
+            assert((charValue == 'X'));
+            assert((stringValue == "Hello, World!"));
 
             CSharpTest::ParamRef8(intValue, floatValue, doubleValue, vector4Value, longListValue, charValue, stringValue, floatValue2);
-            std::cout << "Values after calling ParamRef8: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << ", " << longListValue[0] << ", " << static_cast<char>(charValue) << ", " << stringValue << ", " << floatValue2 << std::endl;
+            assert((intValue == 999));
+            assert((floatValue == -7.5f));
+            assert((doubleValue == 0.123456));
+            assert((vector4Value.x == -100.0f && vector4Value.y == -200.0f && vector4Value.z == -300.0f && vector4Value.w == -400.0f));
+            assert((longListValue == std::vector<int64_t>{ -6, -5, -4, -3, -2, -1 }));
+            assert((charValue == 'Y'));
+            assert((stringValue == "Goodbye, World!"));
+            assert((floatValue2 == 99.99f));
 
             CSharpTest::ParamRef9(intValue, floatValue, doubleValue, vector4Value, longListValue, charValue, stringValue, floatValue2, shortValue);
-            std::cout << "Values after calling ParamRef9: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << ", " << longListValue[0] << ", " << static_cast<char>(charValue) << ", " << stringValue << ", " << floatValue2 << ", " << shortValue << std::endl;
+            assert((intValue == -1234));
+            assert((floatValue == 123.45f));
+            assert((doubleValue == -678.9));
+            assert((vector4Value.x == 987.65f && vector4Value.y == 432.1f && vector4Value.z == 123.456f && vector4Value.w == 789.123f));
+            assert((longListValue == std::vector<int64_t>{ -6, -5, -4, -3, -2, -1, 0, 1, 5, 9 }));
+            assert((charValue == 'A'));
+            assert((stringValue == "Testing, 1 2 3"));
+            assert((floatValue2 == -987.654f));
+            assert((shortValue == 42));
 
             CSharpTest::ParamRef10(intValue, floatValue, doubleValue, vector4Value, longListValue, charValue, stringValue, floatValue2, shortValue, ptrValue);
-            std::cout << "Values after calling ParamRef10: " << intValue << ", " << floatValue << ", " << doubleValue << ", " << "[" << vector4Value.x << " " << vector4Value.y << " " << vector4Value.z << " " << vector4Value.w << "]" << ", " << longListValue[0] << ", " << static_cast<char>(charValue) << ", " << stringValue << ", " << floatValue2 << ", " << shortValue << ", " << ptrValue << std::endl;
+            assert((intValue == 987));
+            assert((floatValue == -0.123f));
+            assert((doubleValue == 456.789));
+            assert((vector4Value.x == -123.456f && vector4Value.y == 0.987f && vector4Value.z == 654.321f && vector4Value.w == -789.123f));
+            assert((longListValue == std::vector<int64_t>{ -6, -5, -4, -3, -2, -1, 0, 1, 5, 9, 4, -7 }));
+            assert((charValue == 'B'));
+            assert((stringValue == "Another string"));
+            assert((floatValue2 == 3.141592f));
+            assert((ptrValue == nullptr));
         }
 
         // Initialize arrays
@@ -162,70 +170,27 @@ public:
             CSharpTest::ParamRefVectors(boolArray, char16Array, sbyteArray, shortArray, intArray, longArray,
                             byteArray, ushortArray, uintArray, ulongArray, intPtrArray, floatArray, doubleArray, stringArray);
 
-            std::cout << "Values after calling ParamRefVectors:" << std::endl;
-            PrintReturnArray("boolArray", boolArray);
-            PrintReturnArray("char16Array", char16Array);
-            PrintReturnArray("sbyteArray", sbyteArray);
-            PrintReturnArray("shortArray", shortArray);
-            PrintReturnArray("intArray", intArray);
-            PrintReturnArray("longArray", longArray);
-            PrintReturnArray("byteArray", byteArray);
-            PrintReturnArray("ushortArray", ushortArray);
-            PrintReturnArray("uintArray", uintArray);
-            PrintReturnArray("ulongArray", ulongArray);
-            PrintReturnArray("intPtrArray", intPtrArray);
-            PrintReturnArray("floatArray", floatArray);
-            PrintReturnArray("doubleArray", doubleArray);
-            PrintReturnArray("stringArray", stringArray);
+            assert((boolArray == std::vector<bool>{ true }));
+            assert((char16Array == std::vector<char16_t>{ 'a', 'b', 'c' }));
+            assert((sbyteArray == std::vector<int8_t>{ -3, -2, -1, 0, 1, 2, 3 }));
+            assert((shortArray == std::vector<int16_t>{ -4, -3, -2, -1, 0, 1, 2, 3, 4 }));
+            assert((intArray == std::vector<int32_t>{ -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5 }));
+            assert((longArray == std::vector<int64_t>{ -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6 }));
+            assert((byteArray == std::vector<uint8_t>{ 0, 1, 2, 3, 4, 5, 6, 7 }));
+            assert((ushortArray == std::vector<uint16_t>{ 0, 1, 2, 3, 4, 5, 6, 7, 8 }));
+            assert((uintArray == std::vector<uint32_t>{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
+            assert((ulongArray == std::vector<uint64_t>{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }));
+            assert((intPtrArray == std::vector<void*>{ nullptr, (void*)1, (void*)2 }));
+            assert((floatArray == std::vector<float>{ -12.34f, 0.0f, 12.34f }));
+            assert((doubleArray == std::vector<double>{ -12.345, 0.0, 12.345 }));
+            assert((stringArray == std::vector<std::string>{ "1", "12", "123", "1234", "12345", "123456" }));
 
             // Call function ParamAllPrimitives and print the returned value
             int64_t returnValue = CSharpTest::ParamAllPrimitives(boolArray[0], char16Array[0], sbyteArray[0], shortArray[0], intArray[0], longArray[0],
                                                      byteArray[0], ushortArray[0], uintArray[0], ulongArray[0], intPtrArray[0], floatArray[0], doubleArray[0]);
 
-            std::cout << "Return value from ParamAllPrimitives: " << returnValue << std::endl;
+            assert((returnValue == 56));
         }
-    }
-
-    template<typename T>
-    void PrintReturnValue(const std::string& functionName, T returnValue) {
-        if constexpr (std::is_same_v<T, plugify::Matrix4x4>) {
-            std::cout << "Function: " << functionName << ", Return Value:" << std::endl;
-            std::cout << "[" << returnValue.a.x << ", " << returnValue.a.y << ", " << returnValue.a.z << ", " << returnValue.a.w << "]" << std::endl;
-            std::cout << "[" << returnValue.b.x << ", " << returnValue.b.y << ", " << returnValue.b.z << ", " << returnValue.b.w << "]" << std::endl;
-            std::cout << "[" << returnValue.c.x << ", " << returnValue.c.y << ", " << returnValue.c.z << ", " << returnValue.c.w << "]" << std::endl;
-            std::cout << "[" << returnValue.d.x << ", " << returnValue.d.y << ", " << returnValue.d.z << ", " << returnValue.d.w << "]" << std::endl;
-        } else if constexpr (std::is_same_v<T, char16_t>) {
-            std::cout << "Function: " << functionName << ", Return Value: " << static_cast<char>(returnValue) << std::endl;
-        } else if constexpr (std::is_same_v<T, plugify::Vector2>) {
-                std::cout << "Function: " << functionName << ", Return Value: [" << returnValue.x << ", " << returnValue.y << "]" << std::endl;
-        } else if constexpr (std::is_same_v<T, plugify::Vector3>) {
-                std::cout << "Function: " << functionName << ", Return Value: [" << returnValue.x << ", " << returnValue.y << ", " << returnValue.z << "]" << std::endl;
-        } else if constexpr (std::is_same_v<T, plugify::Vector4>) {
-                std::cout << "Function: " << functionName << ", Return Value: [" << returnValue.x << ", " << returnValue.y << ", " << returnValue.z << ", " << returnValue.w << "]" << std::endl;
-        } else {
-            std::cout << "Function: " << functionName << ", Return Value: " << returnValue << std::endl;
-        }
-    }
-
-    template<Matrix4x4>
-    void PrintReturnValue(const std::string& functionName, const Matrix4x4& returnValue) {
-        std::cout << "Function: " << functionName << ", Return Value:" << std::endl;
-        std::cout << "[" << returnValue.a.x << ", " << returnValue.a.y << ", " << returnValue.a.z << ", " << returnValue.a.w << "]" << std::endl;
-        std::cout << "[" << returnValue.b.x << ", " << returnValue.b.y << ", " << returnValue.b.z << ", " << returnValue.b.w << "]" << std::endl;
-        std::cout << "[" << returnValue.c.x << ", " << returnValue.c.y << ", " << returnValue.c.z << ", " << returnValue.c.w << "]" << std::endl;
-        std::cout << "[" << returnValue.d.x << ", " << returnValue.d.y << ", " << returnValue.d.z << ", " << returnValue.d.w << "]" << std::endl;
-    }
-
-    template<typename T>
-    void PrintReturnArray(const std::string& functionName, const std::vector<T>& returnValue) {
-        std::cout << "Function: " << functionName << ", Return Value: [";
-        for (const auto& val : returnValue) {
-            if constexpr (std::is_same_v<T, char16_t>)
-                std::cout << static_cast<char>(val) << ", ";
-            else    
-                std::cout << val << ", ";
-        }
-        std::cout << "]" << std::endl;
     }
 };
 

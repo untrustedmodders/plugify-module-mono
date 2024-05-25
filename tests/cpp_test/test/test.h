@@ -86,7 +86,7 @@ extern "C" PLUGIN_API uint64_t NoParamReturnUInt64()
 extern "C" PLUGIN_API void* NoParamReturnPtr64()
 {
     std::cout << "NoParamReturnPtr64" << std::endl;
-    return &NoParamReturnVoid;
+    return (void*)intptr_t(1);
 }
 extern "C" PLUGIN_API float NoParamReturnFloat()
 {
@@ -101,7 +101,7 @@ extern "C" PLUGIN_API double NoParamReturnDouble()
 extern "C" PLUGIN_API void* NoParamReturnFunction()
 {
     std::cout << "NoParamReturnFunction" << std::endl;
-    return &NoParamReturnDouble;
+    return nullptr;
 }
 
 // std::string
@@ -181,7 +181,7 @@ extern "C" PLUGIN_API void NoParamReturnArrayUInt64(std::vector<uint64_t>& outpu
 extern "C" PLUGIN_API void NoParamReturnArrayPtr64(std::vector<void*>& output)
 {
     std::cout << "NoParamReturnArrayPtr64" << std::endl;
-    std::construct_at<>(&output, std::vector<void*>{ (void*)&NoParamReturnArrayUInt8, (void*)&NoParamReturnArrayUInt16, (void*)&NoParamReturnArrayUInt32, (void*)&NoParamReturnArrayUInt64 });
+    std::construct_at<>(&output, std::vector<void*>{ (void*)intptr_t(0), (void*)intptr_t(1), (void*)intptr_t(2), (void*)intptr_t(3) });
 }
 
 extern "C" PLUGIN_API void NoParamReturnArrayFloat(std::vector<float>& output)
@@ -416,7 +416,7 @@ extern "C" PLUGIN_API void ParamRefVectors(std::vector<bool>& p1, std::vector<ch
     p9 = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
     p10 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     p11 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-    p12 = { nullptr, &NoParamReturnMatrix4x4 };
+    p12 = { nullptr, (void*)1 };
     p13 = { -12.34f, 0.0f, 12.34f };
     p14 = { -12.345, 0.0, 12.345 };
     p15 = { "Hello", "World", "OpenAI" };
