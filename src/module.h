@@ -143,7 +143,8 @@ namespace csharplm {
 		static void DeleteReturn(const std::vector<void*>& args, uint8_t& i, plugify::ValueType type);
 		static void SetReturn(const plugify::Method* method, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
 		static void SetParams(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, std::vector<void*>& args);
-		static void SetReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRefs, bool hasRet, const std::vector<void*>& args);
+		static void SetReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const std::vector<void*>& args);
+		static void PullReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const std::vector<void*>& args);
 
 		template<typename T>
 		static void* MonoStructToArg(std::vector<void*>& args);

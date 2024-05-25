@@ -36,6 +36,11 @@ add_subdirectory(external/plugify)
 add_subdirectory(external/dyncall)
 
 #
+# CPPtrace
+#
+add_subdirectory(external/cpptrace)
+
+#
 # Mono
 #
 if(WIN32)
@@ -83,7 +88,7 @@ set(CSHARPLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
 
-set(CSHARPLM_LINK_LIBRARIES plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze dyncall_s)
+set(CSHARPLM_LINK_LIBRARIES plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze cpptrace::cpptrace dyncall_s)
 
 if(NOT COMPILER_SUPPORTS_FORMAT)
 	set(CSHARPLM_LINK_LIBRARIES ${CSHARPLM_LINK_LIBRARIES} fmt::fmt-header-only)
@@ -91,6 +96,7 @@ endif()
 
 include_directories(external/dyncall/)
 include_directories(external/mono/include)
+include_directories(external/cpptrace/include)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIB} ${CSHARPLM_LINK_LIBRARIES})
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
