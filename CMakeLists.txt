@@ -5,7 +5,7 @@ if(POLICY CMP0092)
 endif()
 
 
-project(csharp-lang-module VERSION 1.0.0.0  DESCRIPTION "C# Language Module" HOMEPAGE_URL "https://github.com/untrustedmodders/csharp-lang-module" LANGUAGES C CXX)
+project(mono-lang-module VERSION 1.0.0.0  DESCRIPTION "C# (Mono) Language Module" HOMEPAGE_URL "https://github.com/untrustedmodders/mono-lang-module" LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,11 +44,11 @@ add_subdirectory(external/cpptrace)
 # Mono
 #
 if(WIN32)
-	set(CSHARPLM_PLATFORM "windows")
+	set(MONOLM_PLATFORM "windows")
 elseif(APPLE)
-	set(CSHARPLM_PLATFORM "apple")
+	set(MONOLM_PLATFORM "apple")
 elseif(UNIX)
-	set(CSHARPLM_PLATFORM "linux")
+	set(MONOLM_PLATFORM "linux")
 endif()
 
 if(WIN32)
@@ -58,7 +58,7 @@ else()
 	set(MONO_NATIVE_LIB libmono-native)
 endif()
 
-set(MONO_LIBRARY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/lib/${CSHARPLM_PLATFORM})
+set(MONO_LIBRARY_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/lib/${MONOLM_PLATFORM})
 
 if(WIN32)
 	add_library(${MONO_LIB} STATIC IMPORTED)
@@ -83,23 +83,23 @@ endif()
 #
 # C# Language Module for Plugify
 #
-file(GLOB_RECURSE CSHARPLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
-set(CSHARPLM_PCH_FILE "src/pch.h")
+file(GLOB_RECURSE MONOLM_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.cpp")
+set(MONOLM_PCH_FILE "src/pch.h")
 
-add_library(${PROJECT_NAME} SHARED ${CSHARPLM_SOURCES})
+add_library(${PROJECT_NAME} SHARED ${MONOLM_SOURCES})
 
-set(CSHARPLM_LINK_LIBRARIES plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze cpptrace::cpptrace dyncall_s)
+set(MONOLM_LINK_LIBRARIES plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze cpptrace::cpptrace dyncall_s)
 
 if(NOT COMPILER_SUPPORTS_FORMAT)
-	set(CSHARPLM_LINK_LIBRARIES ${CSHARPLM_LINK_LIBRARIES} fmt::fmt-header-only)
+	set(MONOLM_LINK_LIBRARIES ${MONOLM_LINK_LIBRARIES} fmt::fmt-header-only)
 endif()
 
 include_directories(external/dyncall/)
 include_directories(external/mono/include)
 include_directories(external/cpptrace/include)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIB} ${CSHARPLM_LINK_LIBRARIES})
-target_precompile_headers(${PROJECT_NAME} PRIVATE ${CSHARPLM_PCH_FILE})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIB} ${MONOLM_LINK_LIBRARIES})
+target_precompile_headers(${PROJECT_NAME} PRIVATE ${MONOLM_PCH_FILE})
 
 if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
@@ -114,12 +114,12 @@ elseif(UNIX)
 endif()
 
 include(GenerateExportHeader)
-generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME CSHARPLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
+generate_export_header(${PROJECT_NAME} EXPORT_MACRO_NAME MONOLM_EXPORT EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/module_export.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/exports)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-		CSHARPLM_PLATFORM="${CSHARPLM_PLATFORM}"
-		CSHARPLM_PLATFORM_WINDOWS=$<BOOL:${WIN32}>
-		CSHARPLM_PLATFORM_APPLE=$<BOOL:${APPLE}>
-		CSHARPLM_PLATFORM_LINUX=$<BOOL:${UNIX}>
+		MONOLM_PLATFORM="${MONOLM_PLATFORM}"
+		MONOLM_PLATFORM_WINDOWS=$<BOOL:${WIN32}>
+		MONOLM_PLATFORM_APPLE=$<BOOL:${APPLE}>
+		MONOLM_PLATFORM_LINUX=$<BOOL:${UNIX}>
 )

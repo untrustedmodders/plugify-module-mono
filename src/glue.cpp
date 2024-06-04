@@ -5,21 +5,21 @@
 
 #include <mono/metadata/object.h>
 
-using namespace csharplm;
+using namespace monolm;
 
 #define PLUG_ADD_INTERNAL_CALL(name) mono_add_internal_call("Plugify.InternalCalls::" #name, (const void*) &(name))
 
 static MonoString* Core_GetBaseDirectory() {
-	const fs::path& baseDir = g_csharplm.GetProvider()->GetBaseDir();
-	return g_csharplm.CreateString(baseDir.string());
+	const fs::path& baseDir = g_monolm.GetProvider()->GetBaseDir();
+	return g_monolm.CreateString(baseDir.string());
 }
 
 static bool Core_IsPluginLoaded(MonoString* name) {
-	return g_csharplm.GetProvider()->IsPluginLoaded(utils::MonoStringToUTF8(name));
+	return g_monolm.GetProvider()->IsPluginLoaded(utils::MonoStringToUTF8(name));
 }
 
 static MonoObject* Plugin_FindPluginByName(MonoString* name) {
-	ScriptOpt script = g_csharplm.FindScript(utils::MonoStringToUTF8(name));
+	ScriptOpt script = g_monolm.FindScript(utils::MonoStringToUTF8(name));
 	return script.has_value() ? script->get().GetManagedObject() : nullptr;
 }
 

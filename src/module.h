@@ -30,7 +30,7 @@ namespace plugify {
 	struct ReturnValue;
 }
 
-namespace csharplm {
+namespace monolm {
 	class ScriptInstance {
 	public:
 		ScriptInstance(const plugify::IPlugin& plugin, MonoImage* image, MonoClass* klass);
@@ -197,7 +197,7 @@ namespace csharplm {
 		friend class ScriptInstance;
 	};
 
-	extern CSharpLanguageModule g_csharplm;
+	extern CSharpLanguageModule g_monolm;
 }
 
-extern "C" CSHARPLM_EXPORT plugify::ILanguageModule* GetLanguageModule();
+extern "C" MONOLM_EXPORT plugify::ILanguageModule* GetLanguageModule();

@@ -23,8 +23,8 @@ The C# (Mono) Language Module for Plugify facilitates the development of plugins
 1. Clone this repository:
 
     ```bash
-    git clone https://github.com/untrustedmodders/csharp-lang-module.git
-    cd csharp-lang-module
+    git clone https://github.com/untrustedmodders/mono-lang-module.git
+    cd mono-lang-module
     git submodule update --init --recursive
     ```
 
@@ -57,7 +57,7 @@ The C# (Mono) Language Module for Plugify facilitates the development of plugins
 ## Example
 
 ```c#
-﻿using System;
+using System;
 using System.IO;
 using Plugify;
 

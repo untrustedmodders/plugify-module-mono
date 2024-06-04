@@ -2,7 +2,7 @@
     "fileVersion": 1,
     "version": 1,
     "versionName": "1.0",
-    "friendlyName": "CSharp language module",
+    "friendlyName": "C# (Mono) language module",
     "language": "csharp",
     "description": "Adds support for C# plugins",
     "createdBy": "untrustedmodders",

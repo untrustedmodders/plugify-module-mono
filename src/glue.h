@@ -1,6 +1,6 @@
 #pragma once
 
-namespace csharplm {
+namespace monolm {
 	class Glue {
 	public:
 		static void RegisterFunctions();

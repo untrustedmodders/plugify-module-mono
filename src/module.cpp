@@ -22,7 +22,7 @@
 #include <cpptrace/cpptrace.hpp>
 #include <glaze/glaze.hpp>
 
-#if CSHARPLM_PLATFORM_WINDOWS
+#if MONOLM_PLATFORM_WINDOWS
 #include <windows.h>
 #undef FindResource
 #endif
@@ -40,18 +40,18 @@ struct _MonoDelegate {
 	//....
 };
 
-#define LOG_PREFIX "[CSHARPLM] "
+#define LOG_PREFIX "[MONOLM] "
 
-#if CSHARPLM_PLATFORM_WINDOWS
+#if MONOLM_PLATFORM_WINDOWS
 #define PATH_SEPARATOR ";"
 #else
 #define PATH_SEPARATOR ":"
 #endif
 
-using namespace csharplm;
+using namespace monolm;
 using namespace plugify;
 
-namespace csharplm::utils {
+namespace monolm::utils {
 	std::string ReadText(const fs::path& filepath) {
 		std::ifstream istream(filepath, std::ios::binary);
 		if (!istream.is_open())
@@ -96,7 +96,7 @@ namespace csharplm::utils {
 		MonoError error;
 		char* utf8 = mono_string_to_utf8_checked(string, &error);
 		if (!mono_error_ok(&error)) {
-			g_csharplm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+			g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
 			mono_error_cleanup(&error);
 			return {};
 		}
@@ -325,7 +325,7 @@ namespace csharplm::utils {
 		return output;
 	}
 
-#if CSHARPLM_PLATFORM_WINDOWS
+#if MONOLM_PLATFORM_WINDOWS
 	std::string GetEnvVariable(const char* varName) {
 		DWORD size = GetEnvironmentVariableA(varName, NULL, 0);
 		std::string buffer(size, 0);
@@ -371,7 +371,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	const char* settingsFile = "configs/csharp-lang-module.json";
+	const char* settingsFile = "configs/mono-lang-module.json";
 
 	auto settingsPath = module.FindResource(settingsFile);
 	if (!settingsPath.has_value())
@@ -383,7 +383,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile, glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
-	fs::path monoPath(module.GetBaseDir() / "mono/" CSHARPLM_PLATFORM "/mono/");
+	fs::path monoPath(module.GetBaseDir() / "mono/" MONOLM_PLATFORM "/mono/");
 	auto configPath = module.FindResource("configs/mono_config");
 
 	if (!InitMono(monoPath, configPath))
@@ -619,7 +619,7 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void
 		MonoError error;
 		char* cStr = mono_string_to_utf8_checked(source, &error);
 		if (!mono_error_ok(&error)) {
-			g_csharplm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+			g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
 			mono_error_cleanup(&error);
 			return {};
 		}
@@ -688,10 +688,10 @@ void CSharpLanguageModule::CleanupDelegateCache() {
 // Call from C# to C++
 void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	// TODO: Does mutex here good choose ?
-	std::scoped_lock<std::mutex> lock(g_csharplm._mutex);
+	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
 	std::vector<void*> args;
 
-	DCCallVM* vm = g_csharplm._callVirtMachine.get();
+	DCCallVM* vm = g_monolm._callVirtMachine.get();
 	dcReset(vm);
 
 	bool hasRet = method->retType.type > ValueType::LastPrimitive;
@@ -832,7 +832,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 				// MonoDelegate*
 				case ValueType::Function:
-					dcArgPointer(vm, g_csharplm.MonoDelegateToArg(*p->GetArgument<MonoDelegate**>(i), *param.prototype));
+					dcArgPointer(vm, g_monolm.MonoDelegateToArg(*p->GetArgument<MonoDelegate**>(i), *param.prototype));
 					break;
 				// MonoString*
 				case ValueType::String:
@@ -942,7 +942,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 				// MonoDelegate*
 				case ValueType::Function:
-					dcArgPointer(vm, g_csharplm.MonoDelegateToArg(p->GetArgument<MonoDelegate*>(i), *param.prototype));
+					dcArgPointer(vm, g_monolm.MonoDelegateToArg(p->GetArgument<MonoDelegate*>(i), *param.prototype));
 					break;
 				// MonoString*
 				case ValueType::String:
@@ -1085,107 +1085,107 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		}
 		case ValueType::Function: {
 			void* val = dcCallPointer(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateDelegate(val, *method->retType.prototype));
+			ret->SetReturnPtr(g_monolm.CreateDelegate(val, *method->retType.prototype));
 			break;
 		}
 		case ValueType::Vector2: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateObject(*reinterpret_cast<plugify::Vector2*>(args[0]), g_csharplm._vector2));
+			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Vector2*>(args[0]), g_monolm._vector2));
 			break;
 		}
 		case ValueType::Vector3: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateObject(*reinterpret_cast<plugify::Vector3*>(args[0]), g_csharplm._vector3));
+			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Vector3*>(args[0]), g_monolm._vector3));
 			break;
 		}
 		case ValueType::Vector4: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateObject(*reinterpret_cast<plugify::Vector4*>(args[0]), g_csharplm._vector4));
+			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Vector4*>(args[0]), g_monolm._vector4));
 			break;
 		}
 		case ValueType::Matrix4x4: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateObject(*reinterpret_cast<plugify::Matrix4x4*>(args[0]), g_csharplm._matrix4x4));
+			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Matrix4x4*>(args[0]), g_monolm._matrix4x4));
 			break;
 		}
 		case ValueType::String: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateString(*reinterpret_cast<std::string*>(args[0])));
+			ret->SetReturnPtr(g_monolm.CreateString(*reinterpret_cast<std::string*>(args[0])));
 			break;
 		}
 		case ValueType::ArrayBool: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[0]), mono_get_byte_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[0]), mono_get_byte_class()));
 			break;
 		}
 		case ValueType::ArrayChar8: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[0]), mono_get_char_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[0]), mono_get_char_class()));
 			break;
 		}
 		case ValueType::ArrayChar16: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[0]), mono_get_char_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[0]), mono_get_char_class()));
 			break;
 		}
 		case ValueType::ArrayInt8: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[0]), mono_get_sbyte_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[0]), mono_get_sbyte_class()));
 			break;
 		}
 		case ValueType::ArrayInt16: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[0]), mono_get_int16_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[0]), mono_get_int16_class()));
 			break;
 		}
 		case ValueType::ArrayInt32: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[0]), mono_get_int32_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[0]), mono_get_int32_class()));
 			break;
 		}
 		case ValueType::ArrayInt64: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[0]), mono_get_int64_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[0]), mono_get_int64_class()));
 			break;
 		}
 		case ValueType::ArrayUInt8: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[0]), mono_get_byte_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[0]), mono_get_byte_class()));
 			break;
 		}
 		case ValueType::ArrayUInt16: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[0]), mono_get_uint16_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[0]), mono_get_uint16_class()));
 			break;
 		}
 		case ValueType::ArrayUInt32: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[0]), mono_get_uint32_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[0]), mono_get_uint32_class()));
 			break;
 		}
 		case ValueType::ArrayUInt64: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[0]), mono_get_uint64_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[0]), mono_get_uint64_class()));
 			break;
 		}
 		case ValueType::ArrayPointer: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[0]), mono_get_intptr_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[0]), mono_get_intptr_class()));
 			break;
 		}
 		case ValueType::ArrayFloat: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[0]), mono_get_single_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[0]), mono_get_single_class()));
 			break;
 		}
 		case ValueType::ArrayDouble: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[0]), mono_get_double_class()));
+			ret->SetReturnPtr(g_monolm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[0]), mono_get_double_class()));
 			break;
 		}
 		case ValueType::ArrayString: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_csharplm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[0])));
+			ret->SetReturnPtr(g_monolm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[0])));
 			break;
 		}
 		default:
@@ -1225,52 +1225,52 @@ void CSharpLanguageModule::PullReferences(const Method* method, const Parameters
 				if (param.ref) {
 					switch (param.type) {
 						case ValueType::String:
-							p->SetArgumentAt(i, g_csharplm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
+							p->SetArgumentAt(i, g_monolm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
 							break;
 						case ValueType::ArrayBool:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[j++]), mono_get_byte_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[j++]), mono_get_byte_class()));
 							break;
 						case ValueType::ArrayChar8:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[j++]), mono_get_char_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[j++]), mono_get_char_class()));
 							break;
 						case ValueType::ArrayChar16:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[j++]), mono_get_char_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[j++]), mono_get_char_class()));
 							break;
 						case ValueType::ArrayInt8:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[j++]), mono_get_sbyte_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[j++]), mono_get_sbyte_class()));
 							break;
 						case ValueType::ArrayInt16:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[j++]), mono_get_int16_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[j++]), mono_get_int16_class()));
 							break;
 						case ValueType::ArrayInt32:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[j++]), mono_get_int32_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[j++]), mono_get_int32_class()));
 							break;
 						case ValueType::ArrayInt64:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[j++]), mono_get_int64_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[j++]), mono_get_int64_class()));
 							break;
 						case ValueType::ArrayUInt8:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[j++]), mono_get_byte_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[j++]), mono_get_byte_class()));
 							break;
 						case ValueType::ArrayUInt16:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[j++]), mono_get_uint16_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[j++]), mono_get_uint16_class()));
 							break;
 						case ValueType::ArrayUInt32:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[j++]), mono_get_uint32_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[j++]), mono_get_uint32_class()));
 							break;
 						case ValueType::ArrayUInt64:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[j++]), mono_get_uint64_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[j++]), mono_get_uint64_class()));
 							break;
 						case ValueType::ArrayPointer:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[j++]), mono_get_intptr_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[j++]), mono_get_intptr_class()));
 							break;
 						case ValueType::ArrayFloat:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[j++]), mono_get_single_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[j++]), mono_get_single_class()));
 							break;
 						case ValueType::ArrayDouble:
-							p->SetArgumentAt(i, g_csharplm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[j++]), mono_get_double_class()));
+							p->SetArgumentAt(i, g_monolm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[j++]), mono_get_double_class()));
 							break;
 						case ValueType::ArrayString:
-							p->SetArgumentAt(i, g_csharplm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[j++])));
+							p->SetArgumentAt(i, g_monolm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[j++])));
 							break;
 						default:
 							break;
@@ -1396,56 +1396,56 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					args[j] = p->GetArgument<Matrix4x4*>(i);
 					break;
 				case ValueType::Function:
-					args[j] = g_csharplm.CreateDelegate(p->GetArgument<void*>(i), *param.prototype);
+					args[j] = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.prototype);
 					break;
 				case ValueType::String:
-					args[j] = new MonoString*[1]{ g_csharplm.CreateString(*p->GetArgument<std::string*>(i)) };
+					args[j] = new MonoString*[1]{ g_monolm.CreateString(*p->GetArgument<std::string*>(i)) };
 					break;
 				case ValueType::ArrayBool:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<bool>(*p->GetArgument<std::vector<bool>*>(i), mono_get_byte_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<bool>(*p->GetArgument<std::vector<bool>*>(i), mono_get_byte_class()) };
 					break;
 				/*case ValueType::ArrayChar8:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<char>(*p->GetArgument<std::vector<char>*>(i), mono_get_char_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<char>(*p->GetArgument<std::vector<char>*>(i), mono_get_char_class()) };
 				 	break;
 				 */
 				case ValueType::ArrayChar16:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<char16_t>(*p->GetArgument<std::vector<char16_t>*>(i), mono_get_char_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<char16_t>(*p->GetArgument<std::vector<char16_t>*>(i), mono_get_char_class()) };
 					break;
 				case ValueType::ArrayInt8:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<int8_t>(*p->GetArgument<std::vector<int8_t>*>(i), mono_get_sbyte_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<int8_t>(*p->GetArgument<std::vector<int8_t>*>(i), mono_get_sbyte_class()) };
 					break;
 				case ValueType::ArrayInt16:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<int16_t>(*p->GetArgument<std::vector<int16_t>*>(i), mono_get_int16_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<int16_t>(*p->GetArgument<std::vector<int16_t>*>(i), mono_get_int16_class()) };
 					break;
 				case ValueType::ArrayInt32:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<int32_t>(*p->GetArgument<std::vector<int32_t>*>(i), mono_get_int32_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<int32_t>(*p->GetArgument<std::vector<int32_t>*>(i), mono_get_int32_class()) };
 					break;
 				case ValueType::ArrayInt64:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<int64_t>(*p->GetArgument<std::vector<int64_t>*>(i), mono_get_int64_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<int64_t>(*p->GetArgument<std::vector<int64_t>*>(i), mono_get_int64_class()) };
 					break;
 				case ValueType::ArrayUInt8:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<uint8_t>(*p->GetArgument<std::vector<uint8_t>*>(i), mono_get_byte_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<uint8_t>(*p->GetArgument<std::vector<uint8_t>*>(i), mono_get_byte_class()) };
 					break;
 				case ValueType::ArrayUInt16:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<uint16_t>(*p->GetArgument<std::vector<uint16_t>*>(i), mono_get_uint16_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<uint16_t>(*p->GetArgument<std::vector<uint16_t>*>(i), mono_get_uint16_class()) };
 					break;
 				case ValueType::ArrayUInt32:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<uint32_t>(*p->GetArgument<std::vector<uint32_t>*>(i), mono_get_uint32_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<uint32_t>(*p->GetArgument<std::vector<uint32_t>*>(i), mono_get_uint32_class()) };
 					break;
 				case ValueType::ArrayUInt64:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<uint64_t>(*p->GetArgument<std::vector<uint64_t>*>(i), mono_get_uint64_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<uint64_t>(*p->GetArgument<std::vector<uint64_t>*>(i), mono_get_uint64_class()) };
 					break;
 				case ValueType::ArrayPointer:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<uintptr_t>(*p->GetArgument<std::vector<uintptr_t>*>(i), mono_get_intptr_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<uintptr_t>(*p->GetArgument<std::vector<uintptr_t>*>(i), mono_get_intptr_class()) };
 					break;
 				case ValueType::ArrayFloat:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<float>(*p->GetArgument<std::vector<float>*>(i), mono_get_single_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<float>(*p->GetArgument<std::vector<float>*>(i), mono_get_single_class()) };
 					break;
 				case ValueType::ArrayDouble:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateArrayT<double>(*p->GetArgument<std::vector<double>*>(i), mono_get_double_class()) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateArrayT<double>(*p->GetArgument<std::vector<double>*>(i), mono_get_double_class()) };
 					break;
 				case ValueType::ArrayString:
-					args[j] = new MonoArray*[1]{ g_csharplm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i)) };
+					args[j] = new MonoArray*[1]{ g_monolm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i)) };
 					break;
 			}
 		} else {
@@ -1484,56 +1484,56 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					args[j] = p->GetArgument<Matrix4x4*>(i);
 					break;
 				case ValueType::Function:
-					args[j] = g_csharplm.CreateDelegate(p->GetArgument<void*>(i), *param.prototype);
+					args[j] = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.prototype);
 					break;
 				case ValueType::String:
-					args[j] = g_csharplm.CreateString(*p->GetArgument<std::string*>(i));
+					args[j] = g_monolm.CreateString(*p->GetArgument<std::string*>(i));
 					break;
 				case ValueType::ArrayBool:
-					args[j] = g_csharplm.CreateArrayT<bool>(*p->GetArgument<std::vector<bool>*>(i), mono_get_byte_class());
+					args[j] = g_monolm.CreateArrayT<bool>(*p->GetArgument<std::vector<bool>*>(i), mono_get_byte_class());
 					break;
 				/*case ValueType::ArrayChar8:
-					args[j] = g_csharplm.CreateArrayT<char>(*p->GetArgument<std::vector<char>*>(i), mono_get_char_class());
+					args[j] = g_monolm.CreateArrayT<char>(*p->GetArgument<std::vector<char>*>(i), mono_get_char_class());
 					break;
 				*/
 				case ValueType::ArrayChar16:
-					args[j] = g_csharplm.CreateArrayT<char16_t>(*p->GetArgument<std::vector<char16_t>*>(i), mono_get_char_class());
+					args[j] = g_monolm.CreateArrayT<char16_t>(*p->GetArgument<std::vector<char16_t>*>(i), mono_get_char_class());
 					break;
 				case ValueType::ArrayInt8:
-					args[j] = g_csharplm.CreateArrayT<int8_t>(*p->GetArgument<std::vector<int8_t>*>(i), mono_get_sbyte_class());
+					args[j] = g_monolm.CreateArrayT<int8_t>(*p->GetArgument<std::vector<int8_t>*>(i), mono_get_sbyte_class());
 					break;
 				case ValueType::ArrayInt16:
-					args[j] = g_csharplm.CreateArrayT<int16_t>(*p->GetArgument<std::vector<int16_t>*>(i), mono_get_int16_class());
+					args[j] = g_monolm.CreateArrayT<int16_t>(*p->GetArgument<std::vector<int16_t>*>(i), mono_get_int16_class());
 					break;
 				case ValueType::ArrayInt32:
-					args[j] = g_csharplm.CreateArrayT<int32_t>(*p->GetArgument<std::vector<int32_t>*>(i), mono_get_int32_class());
+					args[j] = g_monolm.CreateArrayT<int32_t>(*p->GetArgument<std::vector<int32_t>*>(i), mono_get_int32_class());
 					break;
 				case ValueType::ArrayInt64:
-					args[j] = g_csharplm.CreateArrayT<int64_t>(*p->GetArgument<std::vector<int64_t>*>(i), mono_get_int64_class());
+					args[j] = g_monolm.CreateArrayT<int64_t>(*p->GetArgument<std::vector<int64_t>*>(i), mono_get_int64_class());
 					break;
 				case ValueType::ArrayUInt8:
-					args[j] = g_csharplm.CreateArrayT<uint8_t>(*p->GetArgument<std::vector<uint8_t>*>(i), mono_get_byte_class());
+					args[j] = g_monolm.CreateArrayT<uint8_t>(*p->GetArgument<std::vector<uint8_t>*>(i), mono_get_byte_class());
 					break;
 				case ValueType::ArrayUInt16:
-					args[j] = g_csharplm.CreateArrayT<uint16_t>(*p->GetArgument<std::vector<uint16_t>*>(i), mono_get_uint16_class());
+					args[j] = g_monolm.CreateArrayT<uint16_t>(*p->GetArgument<std::vector<uint16_t>*>(i), mono_get_uint16_class());
 					break;
 				case ValueType::ArrayUInt32:
-					args[j] = g_csharplm.CreateArrayT<uint32_t>(*p->GetArgument<std::vector<uint32_t>*>(i), mono_get_uint32_class());
+					args[j] = g_monolm.CreateArrayT<uint32_t>(*p->GetArgument<std::vector<uint32_t>*>(i), mono_get_uint32_class());
 					break;
 				case ValueType::ArrayUInt64:
-					args[j] = g_csharplm.CreateArrayT<uint64_t>(*p->GetArgument<std::vector<uint64_t>*>(i), mono_get_uint64_class());
+					args[j] = g_monolm.CreateArrayT<uint64_t>(*p->GetArgument<std::vector<uint64_t>*>(i), mono_get_uint64_class());
 					break;
 				case ValueType::ArrayPointer:
-					args[j] = g_csharplm.CreateArrayT<uintptr_t>(*p->GetArgument<std::vector<uintptr_t>*>(i), mono_get_intptr_class());
+					args[j] = g_monolm.CreateArrayT<uintptr_t>(*p->GetArgument<std::vector<uintptr_t>*>(i), mono_get_intptr_class());
 					break;
 				case ValueType::ArrayFloat:
-					args[j] = g_csharplm.CreateArrayT<float>(*p->GetArgument<std::vector<float>*>(i), mono_get_single_class());
+					args[j] = g_monolm.CreateArrayT<float>(*p->GetArgument<std::vector<float>*>(i), mono_get_single_class());
 					break;
 				case ValueType::ArrayDouble:
-					args[j] = g_csharplm.CreateArrayT<double>(*p->GetArgument<std::vector<double>*>(i), mono_get_double_class());
+					args[j] = g_monolm.CreateArrayT<double>(*p->GetArgument<std::vector<double>*>(i), mono_get_double_class());
 					break;
 				case ValueType::ArrayString:
-					args[j] = g_csharplm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i));
+					args[j] = g_monolm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i));
 					break;
 			}
 		}
@@ -1805,7 +1805,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 			}
 			case ValueType::Function: {
 				auto source = reinterpret_cast<MonoDelegate*>(result);
-				ret->SetReturnPtr<void*>(g_csharplm.MonoDelegateToArg(source, *(method->retType.prototype)));
+				ret->SetReturnPtr<void*>(g_monolm.MonoDelegateToArg(source, *(method->retType.prototype)));
 				break;
 			}
 			case ValueType::String: {
@@ -2349,7 +2349,7 @@ MonoObject* CSharpLanguageModule::InstantiateClass(MonoClass* klass) const {
 }
 
 void CSharpLanguageModule::HandleException(MonoObject* exc, void* /* userData*/) {
-	if (!exc || !g_csharplm._provider)
+	if (!exc || !g_monolm._provider)
 		return;
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
@@ -2378,11 +2378,11 @@ void CSharpLanguageModule::HandleException(MonoObject* exc, void* /* userData*/)
 
 	cpptrace::generate_trace().print();
 
-	g_csharplm._provider->Log(result, Severity::Error);
+	g_monolm._provider->Log(result, Severity::Error);
 }
 
 void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* /* userData*/) {
-	if (!g_csharplm._provider)
+	if (!g_monolm._provider)
 		return;
 
 	Severity severity = Severity::None;
@@ -2416,26 +2416,26 @@ void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logL
 	}
 
 	if (!logDomain || strlen(logDomain) == 0) {
-		g_csharplm._provider->Log(std::format(LOG_PREFIX "{}", message), fatal ? Severity::Fatal : severity);
+		g_monolm._provider->Log(std::format(LOG_PREFIX "{}", message), fatal ? Severity::Fatal : severity);
 	} else {
-		g_csharplm._provider->Log(std::format(LOG_PREFIX "[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
+		g_monolm._provider->Log(std::format(LOG_PREFIX "[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
 	}
 }
 
 void CSharpLanguageModule::OnPrintCallback(const char* message, mono_bool /*isStdout*/) {
-	if (g_csharplm._provider)
-		g_csharplm._provider->Log(std::format(LOG_PREFIX "{}", message), Severity::Warning);
+	if (g_monolm._provider)
+		g_monolm._provider->Log(std::format(LOG_PREFIX "{}", message), Severity::Warning);
 }
 
 void CSharpLanguageModule::OnPrintErrorCallback(const char* message, mono_bool /*isStdout*/) {
-	if (g_csharplm._provider)
-		g_csharplm._provider->Log(std::format(LOG_PREFIX "{}", message), Severity::Error);
+	if (g_monolm._provider)
+		g_monolm._provider->Log(std::format(LOG_PREFIX "{}", message), Severity::Error);
 }
 
 /*_________________________________________________*/
 
 ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClass* klass) : _image{image}, _klass{klass} {
-	_instance = g_csharplm.InstantiateClass(_klass);
+	_instance = g_monolm.InstantiateClass(_klass);
 
 	// Call Script (base) constructor
 	{
@@ -2448,15 +2448,15 @@ ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClas
 		}
 		std::array<void*, 8> args {
 				&id,
-				g_csharplm.CreateString(plugin.GetName()),
-				g_csharplm.CreateString(plugin.GetFriendlyName()),
-				g_csharplm.CreateString(desc.friendlyName),
-				g_csharplm.CreateString(desc.versionName),
-				g_csharplm.CreateString(desc.createdBy),
-				g_csharplm.CreateString(desc.createdByURL),
-				g_csharplm.CreateStringArray(deps),
+				g_monolm.CreateString(plugin.GetName()),
+				g_monolm.CreateString(plugin.GetFriendlyName()),
+				g_monolm.CreateString(desc.friendlyName),
+				g_monolm.CreateString(desc.versionName),
+				g_monolm.CreateString(desc.createdBy),
+				g_monolm.CreateString(desc.createdByURL),
+				g_monolm.CreateStringArray(deps),
 		};
-		mono_runtime_invoke(g_csharplm._plugin.ctor, _instance, args.data(), nullptr);
+		mono_runtime_invoke(g_monolm._plugin.ctor, _instance, args.data(), nullptr);
 	}
 
 	_onStartMethod = mono_class_get_method_from_name(_klass, "OnStart", 0);
@@ -2485,10 +2485,10 @@ void ScriptInstance::InvokeOnEnd() const {
 	}
 }
 
-namespace csharplm {
-	CSharpLanguageModule g_csharplm;
+namespace monolm {
+	CSharpLanguageModule g_monolm;
 }
 
 plugify::ILanguageModule* GetLanguageModule() {
-	return &csharplm::g_csharplm;
+	return &monolm::g_monolm;
 }
