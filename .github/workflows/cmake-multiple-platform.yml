@@ -65,7 +65,7 @@ jobs:
           $CONFIG_PATH = (Get-Item -Path 'build\configs' -Force).Target
           Move-Item -Path $CONFIG_PATH -Destination build\output
           $MONO_PATH = (Get-Item -Path 'build\mono' -Force).Target
-          $MONO_PATH = Join-Path -Path $MONO_PATH -ChildPath "windows"
+          $MONO_PATH = Join-Path -Path $MONO_PATH -ChildPath "windows\mono"
           Move-Item -Path $MONO_PATH -Destination build\output
 
       - uses: actions/upload-artifact@v3
@@ -102,8 +102,8 @@ jobs:
           mv build/mono-lang-module.pmodule build/output
           mv "$(readlink -f build/configs)" build/output
           MONO_PATH=$(readlink build/mono)
-          mv "$MONO_PATH/linux" build/output
-          mv "$MONO_PATH/bin/" build/output/bin
+          mv "$MONO_PATH/linux/mono" build/output
+          mv "$MONO_PATH/bin/*" build/output/bin
 
       - uses: actions/upload-artifact@v3
         with:
