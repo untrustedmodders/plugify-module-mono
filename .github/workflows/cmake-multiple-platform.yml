@@ -98,8 +98,8 @@ jobs:
           mv build/mono-lang-module.pmodule build/output
           mv "$(readlink -f build/configs)" build/output
           MONO_PATH=$(readlink build/mono)
-          mv "$MONO_PATH/linux/mono" build/output
-          mv "$MONO_PATH/bin/*" build/output/bin
+          mv "$MONO_PATH/linux" build/output
+          mv "$MONO_PATH/bin/" build/output/bin
 
       - uses: actions/upload-artifact@v3
         with:
