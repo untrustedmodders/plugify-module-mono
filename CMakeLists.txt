@@ -131,3 +131,14 @@ configure_file(
 	${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pmodule.in
 	${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pmodule
 )
+execute_process(COMMAND cmake -E create_symlink
+    "${CMAKE_SOURCE_DIR}/configs"
+    "${CMAKE_BINARY_DIR}/configs"
+)
+execute_process(COMMAND cmake -E create_symlink
+    "${CMAKE_SOURCE_DIR}/mono"
+    "${CMAKE_BINARY_DIR}/mono"
+)
+
+ln -s $(readlink -f $origlink)
+rm $origlink
