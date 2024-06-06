@@ -139,6 +139,3 @@ execute_process(COMMAND cmake -E create_symlink
     "${CMAKE_SOURCE_DIR}/mono"
     "${CMAKE_BINARY_DIR}/mono"
 )
-
-ln -s $(readlink -f $origlink)
-rm $origlink
