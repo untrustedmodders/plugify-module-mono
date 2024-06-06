@@ -123,3 +123,11 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 		MONOLM_PLATFORM_APPLE=$<BOOL:${APPLE}>
 		MONOLM_PLATFORM_LINUX=$<BOOL:${UNIX}>
 )
+
+set(MONOLM_VERSION "${CMAKE_PROJECT_VERSION}" CACHE STRING "Set version name")
+set(MONOLM_PACKAGE "${PROJECT_NAME}" CACHE STRING "Set package name")
+
+configure_file(
+	${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pmodule.in
+	${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pmodule
+)

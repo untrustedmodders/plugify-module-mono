@@ -1,0 +1,18 @@
+{
+    "fileVersion": 1,
+    "version": ${MONOLM_VERSION},
+    "versionName": "v${MONOLM_VERSION}",
+    "friendlyName": "C# (Mono) language module",
+    "language": "csharp",
+    "description": "Adds support for C# (Mono) plugins",
+    "createdBy": "untrustedmodders",
+    "createdByURL": "https://github.com/untrustedmodders/",
+    "docsURL": "https://github.com/untrustedmodders/mono-lang-module/README.md",
+    "downloadURL": "https://github.com/untrustedmodders/mono-lang-module/releases/download/v${MONOLM_VERSION}/${MONOLM_PACKAGE}.zip",
+    "updateURL": "https://untrustedmodders.github.com/mono-lang-module/mono-lang-module.json",
+    "supportedPlatforms": [],
+    "resourceDirectories": [
+        "configs"
+    ],
+    "forceLoad": false
+}
