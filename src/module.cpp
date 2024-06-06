@@ -383,7 +383,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile, glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
-	fs::path monoPath(module.GetBaseDir() / "mono/" MONOLM_PLATFORM "/mono/");
+	fs::path monoPath(module.GetBaseDir() / "mono/");
 	auto configPath = module.FindResource("configs/mono_config");
 
 	if (!InitMono(monoPath, configPath))
