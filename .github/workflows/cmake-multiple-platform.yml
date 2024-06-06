@@ -57,12 +57,16 @@ jobs:
           cmake --build . --target mono-lang-module --config ${{ env.BUILD_TYPE }} -- /m:16
 
       - name: Clean build directory
+        shell: pwsh
         run: |
-          mkdir -p build/output/bin
-          cp build/${{env.BUILD_TYPE}}/mono-lang-module.dll build/output/bin
-          cp build/mono-lang-module.pmodule build/output
-          cp -r ../configs build/output
-          cp -r ../mono/windows/mono build/output
+          New-Item -ItemType Directory -Path build\output\bin -Force
+          Copy-Item -Path build\mono-lang-module.dll -Destination build\output\bin
+          Copy-Item -Path build\mono-lang-module.pmodule -Destination build\output
+          $CONFIG_PATH = (Get-Item -Path 'build\configs' -Force).Target
+          Move-Item -Path $CONFIG_PATH -Destination build\output
+          $MONO_PATH = (Get-Item -Path 'build\mono' -Force).Target
+          $MONO_PATH = Join-Path -Path $MONO_PATH -ChildPath "windows"
+          Move-Item -Path $MONO_PATH -Destination build\output
 
       - uses: actions/upload-artifact@v3
         with:
