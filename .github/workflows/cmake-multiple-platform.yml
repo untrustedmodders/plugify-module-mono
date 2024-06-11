@@ -125,19 +125,22 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Install runtime
+      - name: Install .NET Core
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: "4.7.2"
+          dotnet-version: "8.0.x"
+          
+      - name: Install .NET Framework
+        run: choco install netfx-4.7.2 
 
       - name: Build library
         run: |
-          msbuild managed/Plugify/Plugify.sln /p:Configuration=Release /p:Version=1.0.${{ needs.setup.outputs.buildnumber }}
+          dotnet build -c Release /p:Version=1.0.${{ needs.setup.outputs.buildnumber }} managed/Plugify
 
       - uses: actions/upload-artifact@v3
         with:
           name: mono-build-api-${{ env.GITHUB_SHA_SHORT }}
-          path: managed/Plugify/Plugify/bin/Release
+          path: managed/Plugify/bin/Release
 
   publish:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
