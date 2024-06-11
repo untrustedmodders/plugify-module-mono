@@ -32,9 +32,7 @@
         <WarningLevel>4</WarningLevel>
     </PropertyGroup>
     <ItemGroup>
-        <Reference Include="Plugify">
-          <HintPath>plugify\Plugify.dll</HintPath>
-        </Reference>
+        <ProjectReference Include="..\Plugify\Plugify.csproj" />
         <Reference Include="System" />
         <Reference Include="System.Core" />
         <Reference Include="System.Data" />

@@ -111,11 +111,39 @@ jobs:
           name: monolm-build-linux-${{ env.GITHUB_SHA_SHORT }}
           path: build/output/
 
+  build_managed:
+    needs: setup
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - name: Prepare env
+        shell: bash
+        run: echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+
+      - name: Install runtime
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: "4.7.2"
+
+      - name: Build library
+        run: |
+          msbuild managed/Plugify/Plugify.sln /p:Configuration=Release /p:Version=1.0.${{ needs.setup.outputs.buildnumber }}
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: mono-build-api-${{ env.GITHUB_SHA_SHORT }}
+          path: managed/Plugify/Plugify/bin/Release
+
   publish:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     permissions:
       contents: write
-    needs: ["setup", "build_linux", "build_windows"]
+    needs: ["setup", "build_linux", "build_windows", "build_managed"]
     runs-on: ubuntu-latest
     steps:
       - name: Prepare env
@@ -134,6 +162,16 @@ jobs:
         with:
           name: monolm-build-linux-${{ env.GITHUB_SHA_SHORT }}
           path: build/linux
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: dotnetlm-build-api-${{ env.GITHUB_SHA_SHORT }}
+          path: build/api
+
+      - name: Copy API to Builds
+        run: |
+          cp -r build/api/* build/linux/bin
+          cp -r build/api/* build/windows/bin
 
       - name: Zip Builds
         run: |
