@@ -139,7 +139,7 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: mono-build-api-${{ env.GITHUB_SHA_SHORT }}
+          name: monolm-build-api-${{ env.GITHUB_SHA_SHORT }}
           path: managed/Plugify/bin/Release
 
   publish:
@@ -168,7 +168,7 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: dotnetlm-build-api-${{ env.GITHUB_SHA_SHORT }}
+          name: monolm-build-api-${{ env.GITHUB_SHA_SHORT }}
           path: build/api
 
       - name: Copy API to Builds
