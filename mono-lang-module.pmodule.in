@@ -3,7 +3,7 @@
     "version": ${MONOLM_VERSION},
     "versionName": "v${MONOLM_VERSION}",
     "friendlyName": "C# (Mono) language module",
-    "language": "csharp",
+    "language": "csharp-mono",
     "description": "Adds support for C# (Mono) plugins",
     "createdBy": "untrustedmodders",
     "createdByURL": "https://github.com/untrustedmodders/",

@@ -12,7 +12,7 @@
 	"entryPoint": "bin/CSharpTest.dll",
 	"supportedPlatforms": [],
 	"languageModule": {
-		"name": "csharp"
+		"name": "csharp-mono"
 	},
 	"dependencies": [
 	],
