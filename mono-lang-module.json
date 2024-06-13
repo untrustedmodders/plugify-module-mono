@@ -4,7 +4,7 @@
          "name": "mono-lang-module",
          "type": "csharp-mono",
          "author": "untrustedmodders",
-         "description": "Adds support for C# plugins",
+         "description": "Adds support for C# (Mono) plugins",
          "versions": [
             {
                "version": 1,
