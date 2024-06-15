@@ -494,7 +494,6 @@ void CSharpLanguageModule::Shutdown() {
 		_assemblyName = nullptr;
 	}
 
-	_callVirtMachine.reset();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
 	_actionClasses.clear();
@@ -503,8 +502,9 @@ void CSharpLanguageModule::Shutdown() {
 	_functions.clear();
 	_methods.clear();
 	_scripts.clear();
-	_provider.reset();
+	_callVirtMachine.reset();
 	_rt.reset();
+	_provider.reset();
 
 	ShutdownMono();
 }
