@@ -118,9 +118,11 @@ namespace monolm {
 		template<typename T>
 		MonoObject* CreateObject(T& source, const ClassInfo& info);
 		MonoDelegate* CreateDelegate(void* func, const plugify::Method& method);
-		MonoString* CreateString(const std::string& source) const;
+		template<typename T>
+		MonoString* CreateString(const T& source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
-		MonoArray* CreateStringArray(const std::vector<std::string>& source) const;
+		template<typename T>
+		MonoArray* CreateStringArray(const std::vector<T>& source) const;
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:

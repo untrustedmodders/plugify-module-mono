@@ -14,6 +14,7 @@ namespace Plugify
         public string Version { get; }
         public string Author { get; }
         public string Website { get; }
+        public string BaseDir { get; }
         public string[] Dependencies { get; }
 
         protected Plugin()
@@ -25,10 +26,11 @@ namespace Plugify
             Version = string.Empty;
             Author = string.Empty;
             Website = string.Empty;
+            BaseDir = string.Empty;
             Dependencies = new string[0];
         }
 
-        internal Plugin(ulong id, string name, string fullName, string description, string version, string author, string website, string[] dependencies)
+        internal Plugin(ulong id, string name, string fullName, string description, string version, string author, string website, string baseDir, string[] dependencies)
         {
             Id = id;
             Name = name;
@@ -37,6 +39,7 @@ namespace Plugify
             Version = version;
             Author = author;
             Website = website;
+            BaseDir = baseDir;
             Dependencies = dependencies;
         }
 

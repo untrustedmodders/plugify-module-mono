@@ -415,7 +415,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	}
 
 	{
-		_plugin = utils::LoadCoreClass(assemblyErrors, _core.image, "Plugin", 8);
+		_plugin = utils::LoadCoreClass(assemblyErrors, _core.image, "Plugin", 9);
 		_vector2 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
 		_vector3 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
 		_vector4 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
@@ -2324,8 +2324,9 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 	}
 }
 
-MonoString* CSharpLanguageModule::CreateString(const std::string& source) const {
-	return source.empty() ? mono_string_empty(_appDomain) : mono_string_new(_appDomain, source.c_str());
+template<typename T>
+MonoString* CSharpLanguageModule::CreateString(const T& source) const {
+	return source.empty() ? mono_string_empty(_appDomain) : mono_string_new(_appDomain, source.data());
 }
 
 template<typename T>
@@ -2357,7 +2358,8 @@ MonoArray* CSharpLanguageModule::CreateArray(MonoClass* klass, size_t count) con
 	return mono_array_new(_appDomain, klass, count);
 }
 
-MonoArray* CSharpLanguageModule::CreateStringArray(const std::vector<std::string>& source) const {
+template<typename T>
+MonoArray* CSharpLanguageModule::CreateStringArray(const std::vector<T>& source) const {
 	MonoArray* array = CreateArray(mono_get_string_class(), source.size());
 	for (size_t i = 0; i < source.size(); ++i) {
 		mono_array_set(array, MonoString*, i, CreateString(source[i]));
@@ -2464,19 +2466,20 @@ ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClas
 	{
 		const auto& desc = plugin.GetDescriptor();
 		auto id = plugin.GetId();
-		std::vector<std::string> deps;
+		std::vector<std::string_view> deps;
 		deps.reserve(desc.dependencies.size());
 		for (const auto& dependency : desc.dependencies) {
 			deps.emplace_back(dependency.name);
 		}
-		std::array<void*, 8> args {
+		std::array<void*, 9> args {
 				&id,
 				g_monolm.CreateString(plugin.GetName()),
 				g_monolm.CreateString(plugin.GetFriendlyName()),
-				g_monolm.CreateString(desc.friendlyName),
+				g_monolm.CreateString(desc.description),
 				g_monolm.CreateString(desc.versionName),
 				g_monolm.CreateString(desc.createdBy),
 				g_monolm.CreateString(desc.createdByURL),
+				g_monolm.CreateString(plugin.GetBaseDir().string()),
 				g_monolm.CreateStringArray(deps),
 		};
 		mono_runtime_invoke(g_monolm._plugin.ctor, _instance, args.data(), nullptr);

@@ -14,8 +14,14 @@ static MonoString* Core_GetBaseDirectory() {
 	return g_monolm.CreateString(baseDir.string());
 }
 
-static bool Core_IsPluginLoaded(MonoString* name) {
-	return g_monolm.GetProvider()->IsPluginLoaded(utils::MonoStringToUTF8(name));
+static bool Core_IsModuleLoaded(MonoString* name, int version, bool minimum) {
+	auto requiredVersion = version != INT_MAX ? std::make_optional(version) : std::nullopt;
+	return g_monolm.GetProvider()->IsModuleLoaded(utils::MonoStringToUTF8(name), requiredVersion, minimum);
+}
+
+static bool Core_IsPluginLoaded(MonoString* name, int version, bool minimum) {
+	auto requiredVersion = version != INT_MAX ? std::make_optional(version) : std::nullopt;
+	return g_monolm.GetProvider()->IsPluginLoaded(utils::MonoStringToUTF8(name), requiredVersion, minimum);
 }
 
 static MonoObject* Plugin_FindPluginByName(MonoString* name) {
@@ -25,6 +31,7 @@ static MonoObject* Plugin_FindPluginByName(MonoString* name) {
 
 void Glue::RegisterFunctions() {
 	PLUG_ADD_INTERNAL_CALL(Core_GetBaseDirectory);
+	PLUG_ADD_INTERNAL_CALL(Core_IsModuleLoaded);
 	PLUG_ADD_INTERNAL_CALL(Core_IsPluginLoaded);
 	PLUG_ADD_INTERNAL_CALL(Plugin_FindPluginByName);
 }
