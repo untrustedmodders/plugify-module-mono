@@ -41,10 +41,10 @@ public:
             assert((CSharpTest::NoParamReturnArrayFloat() == std::vector<float>{-12.34f, 0.0f, 12.34f}));
             assert((CSharpTest::NoParamReturnArrayDouble() == std::vector<double>{-12.345, 0.0, 12.345}));
             assert((CSharpTest::NoParamReturnArrayString() == std::vector<std::string>{"1st string", "2nd string", "3rd element string (Should be big enough to avoid small string optimization)"}));
-            //assert((CSharpTest::NoParamReturnVector2() == Vector2(1, 2));
-            //assert((CSharpTest::NoParamReturnVector3() == Vector3(1, 2, 3));
-            //assert((CSharpTest::NoParamReturnVector4() == Vector4(1, 2, 3, 4));
-            //assert((CSharpTest::NoParamReturnMatrix4x4() == Matrix4x4(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16));
+            assert((CSharpTest::NoParamReturnVector2() == plugify::Vector2(1, 2)));
+            assert((CSharpTest::NoParamReturnVector3() == plugify::Vector3(1, 2, 3)));
+            assert((CSharpTest::NoParamReturnVector4() == plugify::Vector4(1, 2, 3, 4)));
+            assert((CSharpTest::NoParamReturnMatrix4x4() == plugify::Matrix4x4(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)));
         }
 
         int32_t intValue = 42;

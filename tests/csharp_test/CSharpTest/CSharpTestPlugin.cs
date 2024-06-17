@@ -44,14 +44,14 @@ namespace CSharpTest
 				Assert(NoParamReturnArrayUInt32().SequenceEqual(new uint[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }), $"Expected NoParamReturnArrayUInt32() to return array [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], but got {string.Join(", ", NoParamReturnArrayUInt32())}");
 				Assert(NoParamReturnArrayUInt64().SequenceEqual(new ulong[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }), $"Expected NoParamReturnArrayUInt64() to return array [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], but got {string.Join(", ", NoParamReturnArrayUInt64())}");
 				Assert(NoParamReturnArrayPtr64().SequenceEqual(new IntPtr[] { IntPtr.Zero, (IntPtr)1, (IntPtr)2, (IntPtr)3 }), $"Expected NoParamReturnArrayPtr64() to return array [IntPtr.Zero, (IntPtr)1, (IntPtr)2, (IntPtr)3], but got {string.Join(", ", NoParamReturnArrayPtr64())}");
-				Assert(NoParamReturnArrayFloat().SequenceEqual(new float[] { -12.34f, 0.0f, 12.34f }), "Expected array float values [-12.34, 0.0, 12.34] but received different values.");
-				Assert(NoParamReturnArrayDouble().SequenceEqual(new double[] { -12.345, 0.0, 12.345 }), "Expected array double values [-12.345, 0.0, 12.345] but received different values.");
-				Assert(NoParamReturnArrayString().SequenceEqual(new string[] { "1st string", "2nd string", "3rd element string (Should be big enough to avoid small string optimization)" }), "Expected array string values ['1st string', '2nd string', '3rd element string (Should be big enough to avoid small string optimization)'] but received different values.");
+				Assert(NoParamReturnArrayFloat().SequenceEqual(new float[] { -12.34f, 0.0f, 12.34f }), $"Expected NoParamReturnArrayFloat() to return values [-12.34, 0.0, 12.34] but got {string.Join(", ", NoParamReturnArrayFloat())}");
+				Assert(NoParamReturnArrayDouble().SequenceEqual(new double[] { -12.345, 0.0, 12.345 }), $"Expected NoParamReturnArrayDouble() to return values [-12.345, 0.0, 12.345] but got {string.Join(", ", NoParamReturnArrayDouble())}");
+				Assert(NoParamReturnArrayString().SequenceEqual(new string[] { "1st string", "2nd string", "3rd element string (Should be big enough to avoid small string optimization)" }), $"Expected NoParamReturnArrayString() to return values ['1st string', '2nd string', '3rd element string (Should be big enough to avoid small string optimization)'] but got {string.Join(", ", NoParamReturnArrayString())}");
 				// Assertion for vector and matrix types could be added once the appropriate types are defined or imported.
-				//Assert(NoParamReturnVector2() == new Vector2(1, 2), "NoParamReturnVector2() failed.");
-				//Assert(NoParamReturnVector3() == new Vector3(1, 2, 3), "NoParamReturnVector3() failed.");
-				//Assert(NoParamReturnVector4() == new Vector4(1, 2, 3, 4), "NoParamReturnVector4() failed.");
-				//Assert(NoParamReturnMatrix4x4() == new Matrix4x4(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16), "NoParamReturnMatrix4x4() failed.");
+				Assert(NoParamReturnVector2() == new Vector2(1, 2), $"Expected NoParamReturnVector2() to return values [1.0, 2.0] but got {NoParamReturnVector2().ToString()}");
+				Assert(NoParamReturnVector3() == new Vector3(1, 2, 3), $"Expected NoParamReturnVector3() to return values [1.0, 2.0, 3.0] but got {NoParamReturnVector3().ToString()}");
+				Assert(NoParamReturnVector4() == new Vector4(1, 2, 3, 4), $"Expected NoParamReturnVector4() to return values [1.0, 2.0, 3.0, 4.0] but got {NoParamReturnVector4().ToString()}");
+				Assert(NoParamReturnMatrix4x4() == new Matrix4x4(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16), $"Expected NoParamReturnMatrix4x4() to return values [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0] but got {NoParamReturnMatrix4x4().ToString()}");
             }
 	        
 	        int intValue = 42;
