@@ -55,11 +55,9 @@ namespace monolm {
 		friend class CSharpLanguageModule;
 	};
 
-	namespace utils {
-		std::string MonoStringToUTF8(MonoString* string);
-		template<typename T>
-		void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
-	}
+	std::string MonoStringToUTF8(MonoString* string);
+	template<typename T>
+	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
 
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
 	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
@@ -67,6 +65,7 @@ namespace monolm {
 	using MethodRef = std::reference_wrapper<const plugify::Method>;
 	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
 	//using AssemblyMap = std::unordered_map<std::string, MonoAssembly*>;
+	using ArgumentList = std::vector<void*>;
 
 	/*struct ImportMethod {
 		MethodRef method;

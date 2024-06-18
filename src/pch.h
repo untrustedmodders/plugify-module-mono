@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <mutex>
+#include <fstream>
 
 #include <filesystem>
 namespace fs = std::filesystem;

@@ -15,17 +15,17 @@ static MonoString* Core_GetBaseDirectory() {
 }
 
 static bool Core_IsModuleLoaded(MonoString* name, int version, bool minimum) {
-	auto requiredVersion = version != INT_MAX ? std::make_optional(version) : std::nullopt;
-	return g_monolm.GetProvider()->IsModuleLoaded(utils::MonoStringToUTF8(name), requiredVersion, minimum);
+	auto requiredVersion = (version >= 0 && version != INT_MAX) ? std::make_optional(version) : std::nullopt;
+	return g_monolm.GetProvider()->IsModuleLoaded(MonoStringToUTF8(name), requiredVersion, minimum);
 }
 
 static bool Core_IsPluginLoaded(MonoString* name, int version, bool minimum) {
-	auto requiredVersion = version != INT_MAX ? std::make_optional(version) : std::nullopt;
-	return g_monolm.GetProvider()->IsPluginLoaded(utils::MonoStringToUTF8(name), requiredVersion, minimum);
+	auto requiredVersion = (version >= 0 && version != INT_MAX) ? std::make_optional(version) : std::nullopt;
+	return g_monolm.GetProvider()->IsPluginLoaded(MonoStringToUTF8(name), requiredVersion, minimum);
 }
 
 static MonoObject* Plugin_FindPluginByName(MonoString* name) {
-	ScriptOpt script = g_monolm.FindScript(utils::MonoStringToUTF8(name));
+	ScriptOpt script = g_monolm.FindScript(MonoStringToUTF8(name));
 	return script.has_value() ? script->get().GetManagedObject() : nullptr;
 }
 

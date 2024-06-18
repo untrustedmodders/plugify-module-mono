@@ -1,5 +1,6 @@
 #include "module.h"
 #include "glue.h"
+#include "utils.h"
 
 #include <mono/jit/jit.h>
 #include <mono/utils/mono-logger.h>
@@ -21,11 +22,6 @@
 
 #include <cpptrace/cpptrace.hpp>
 #include <glaze/glaze.hpp>
-
-#if MONOLM_PLATFORM_WINDOWS
-#include <windows.h>
-#undef FindResource
-#endif
 
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
 MONO_API void* mono_delegate_to_ftnptr(MonoDelegate* delegate);
@@ -51,316 +47,255 @@ struct _MonoDelegate {
 using namespace monolm;
 using namespace plugify;
 
-namespace monolm::utils {
-	std::string ReadText(const fs::path& filepath) {
-		std::ifstream istream(filepath, std::ios::binary);
-		if (!istream.is_open())
-			return {};
-		istream.unsetf(std::ios::skipws);
-		return { std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
-	}
+bool IsMethodPrimitive(const plugify::Method& method) {
+	// char8 is exception among primitive types
 
-	template<typename T>
-	std::vector<T> ReadBytes(const fs::path& filepath) {
-		std::ifstream istream(filepath, std::ios::binary);
-		if (!istream.is_open())
-			return {};
-		return { std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>() };
-	}
+	if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
+		return false;
 
-	MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
-		auto buffer = ReadBytes<char>(assemblyPath);
-		MonoImage* image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
-
-		if (status != MONO_IMAGE_OK)
-			return nullptr;
-
-		if (loadPDB) {
-			fs::path pdbPath(assemblyPath);
-			pdbPath.replace_extension(".pdb");
-
-			auto bytes = ReadBytes<mono_byte>(pdbPath);
-			mono_debug_open_image_from_memory(image, bytes.data(), static_cast<int>(bytes.size()));
-
-			// If pdf not load ?
-		}
-
-		MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
-		mono_image_close(image);
-		return assembly;
-	}
-
-	std::string MonoStringToUTF8(MonoString* string) {
-		if (string == nullptr || mono_string_length(string) == 0)
-			return {};
-		MonoError error;
-		char* utf8 = mono_string_to_utf8_checked(string, &error);
-		if (!mono_error_ok(&error)) {
-			g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
-			mono_error_cleanup(&error);
-			return {};
-		}
-		std::string result(utf8);
-		mono_free(utf8);
-		return result;
-	}
-
-	template<typename T>
-	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
-		auto length = mono_array_length(array);
-		dest.resize(length);
-		for (size_t i = 0; i < length; ++i) {
-			if constexpr (std::is_same_v<T, std::string>) {
-				MonoObject* element = mono_array_get(array, MonoObject*, i);
-				if (element != nullptr)
-					dest[i] = MonoStringToUTF8(reinterpret_cast<MonoString*>(element));
-				else
-					dest[i] = T{};
-			} else if constexpr (std::is_same_v<T, char>) {
-				dest[i] = static_cast<char>(mono_array_get(array, char16_t, i));
-			} else {
-				dest[i] = mono_array_get(array, T, i);
-			}
-		}
-	}
-
-	ValueType MonoTypeToValueType(const char* typeName) {
-		static std::unordered_map<std::string, ValueType> valueTypeMap = {
-				{ "System.Void", ValueType::Void },
-				{ "System.Boolean", ValueType::Bool },
-				{ "System.Char", ValueType::Char16 },
-				{ "System.SByte", ValueType::Int8 },
-				{ "System.Int16", ValueType::Int16 },
-				{ "System.Int32", ValueType::Int32 },
-				{ "System.Int64", ValueType::Int64 },
-				{ "System.Byte", ValueType::UInt8 },
-				{ "System.UInt16", ValueType::UInt16 },
-				{ "System.UInt32", ValueType::UInt32 },
-				{ "System.UInt64", ValueType::UInt64 },
-				{ "System.IntPtr", ValueType::Pointer },
-				{ "System.UIntPtr", ValueType::Pointer },
-				{ "System.Single", ValueType::Float },
-				{ "System.Double", ValueType::Double },
-				{ "System.String", ValueType::String },
-				{ "System.Boolean[]", ValueType::ArrayBool },
-				{ "System.Char[]", ValueType::ArrayChar16 },
-				{ "System.SByte[]", ValueType::ArrayInt8 },
-				{ "System.Int16[]", ValueType::ArrayInt16 },
-				{ "System.Int32[]", ValueType::ArrayInt32 },
-				{ "System.Int64[]", ValueType::ArrayInt64 },
-				{ "System.Byte[]", ValueType::ArrayUInt8 },
-				{ "System.UInt16[]", ValueType::ArrayUInt16 },
-				{ "System.UInt32[]", ValueType::ArrayUInt32 },
-				{ "System.UInt64[]", ValueType::ArrayUInt64 },
-				{ "System.IntPtr[]", ValueType::ArrayPointer },
-				{ "System.UIntPtr[]", ValueType::ArrayPointer },
-				{ "System.Single[]", ValueType::ArrayFloat },
-				{ "System.Double[]", ValueType::ArrayDouble },
-				{ "System.String[]", ValueType::ArrayString },
-
-				{ "System.Boolean&", ValueType::Bool },
-				{ "System.Char&", ValueType::Char16 },
-				{ "System.SByte&", ValueType::Int8 },
-				{ "System.Int16&", ValueType::Int16 },
-				{ "System.Int32&", ValueType::Int32 },
-				{ "System.Int64&", ValueType::Int64 },
-				{ "System.Byte&", ValueType::UInt8 },
-				{ "System.UInt16&", ValueType::UInt16 },
-				{ "System.UInt32&", ValueType::UInt32 },
-				{ "System.UInt64&", ValueType::UInt64 },
-				{ "System.IntPtr&", ValueType::Pointer },
-				{ "System.UIntPtr&", ValueType::Pointer },
-				{ "System.Single&", ValueType::Float },
-				{ "System.Double&", ValueType::Double },
-				{ "System.String&", ValueType::String },
-				{ "System.Boolean[]&", ValueType::ArrayBool },
-				{ "System.Char[]&", ValueType::ArrayChar16 },
-				{ "System.SByte[]&", ValueType::ArrayInt8 },
-				{ "System.Int16[]&", ValueType::ArrayInt16 },
-				{ "System.Int32[]&", ValueType::ArrayInt32 },
-				{ "System.Int64[]&", ValueType::ArrayInt64 },
-				{ "System.Byte[]&", ValueType::ArrayUInt8 },
-				{ "System.UInt16[]&", ValueType::ArrayUInt16 },
-				{ "System.UInt32[]&", ValueType::ArrayUInt32 },
-				{ "System.UInt64[]&", ValueType::ArrayUInt64 },
-				{ "System.IntPtr[]&", ValueType::ArrayPointer },
-				{ "System.UIntPtr[]&", ValueType::ArrayPointer },
-				{ "System.Single[]&", ValueType::ArrayFloat },
-				{ "System.Double[]&", ValueType::ArrayDouble },
-				{ "System.String[]&", ValueType::ArrayString },
-
-				{ "System.Delegate", ValueType::Function },
-				{ "System.Func`1", ValueType::Function },
-				{ "System.Func`2", ValueType::Function },
-				{ "System.Func`3", ValueType::Function },
-				{ "System.Func`4", ValueType::Function },
-				{ "System.Func`5", ValueType::Function },
-				{ "System.Func`6", ValueType::Function },
-				{ "System.Func`7", ValueType::Function },
-				{ "System.Func`8", ValueType::Function },
-				{ "System.Func`9", ValueType::Function },
-				{ "System.Func`10", ValueType::Function },
-				{ "System.Func`11", ValueType::Function },
-				{ "System.Func`12", ValueType::Function },
-				{ "System.Func`13", ValueType::Function },
-				{ "System.Func`14", ValueType::Function },
-				{ "System.Func`15", ValueType::Function },
-				{ "System.Func`16", ValueType::Function },
-				{ "System.Func`17", ValueType::Function },
-				{ "System.Action", ValueType::Function },
-				{ "System.Action`1", ValueType::Function },
-				{ "System.Action`2", ValueType::Function },
-				{ "System.Action`3", ValueType::Function },
-				{ "System.Action`4", ValueType::Function },
-				{ "System.Action`5", ValueType::Function },
-				{ "System.Action`6", ValueType::Function },
-				{ "System.Action`7", ValueType::Function },
-				{ "System.Action`8", ValueType::Function },
-				{ "System.Action`9", ValueType::Function },
-				{ "System.Action`10", ValueType::Function },
-				{ "System.Action`11", ValueType::Function },
-				{ "System.Action`12", ValueType::Function },
-				{ "System.Action`13", ValueType::Function },
-				{ "System.Action`14", ValueType::Function },
-				{ "System.Action`15", ValueType::Function },
-				{ "System.Action`16", ValueType::Function },
-
-				{ "Plugify.Vector2", ValueType::Vector2 },
-				{ "Plugify.Vector3", ValueType::Vector3 },
-				{ "Plugify.Vector4", ValueType::Vector4 },
-				{ "Plugify.Matrix4x4", ValueType::Matrix4x4 },
-
-				{ "Plugify.Vector2&", ValueType::Vector2 },
-				{ "Plugify.Vector3&", ValueType::Vector3 },
-				{ "Plugify.Vector4&", ValueType::Vector4 },
-				{ "Plugify.Matrix4x4&", ValueType::Matrix4x4 },
-		};
-		auto it = valueTypeMap.find(typeName);
-		if (it != valueTypeMap.end())
-			return std::get<ValueType>(*it);
-		return ValueType::Invalid;
-	}
-
-	std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
-		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
-		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
-		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
-		return MonoStringToUTF8(messageString);
-	}
-
-	bool IsMethodPrimitive(const plugify::Method& method) {
-		// char8 is exception among primitive types
-		
-		if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
+	for (const auto& param : method.paramTypes) {
+		if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive && param.type < ValueType::FirstPOD))
 			return false;
+	}
 
-		for (const auto& param : method.paramTypes) {
-			if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive && param.type < ValueType::FirstPOD))
-				return false;
+	return true;
+}
+
+std::string monolm::MonoStringToUTF8(MonoString* string) {
+	if (string == nullptr || mono_string_length(string) == 0)
+		return {};
+	MonoError error;
+	char* utf8 = mono_string_to_utf8_checked(string, &error);
+	if (!mono_error_ok(&error)) {
+		g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+		mono_error_cleanup(&error);
+		return {};
+	}
+	std::string result(utf8);
+	mono_free(utf8);
+	return result;
+}
+
+template<typename T>
+void monolm::MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
+	auto length = mono_array_length(array);
+	dest.resize(length);
+	for (size_t i = 0; i < length; ++i) {
+		if constexpr (std::is_same_v<T, std::string>) {
+			MonoObject* element = mono_array_get(array, MonoObject*, i);
+			if (element != nullptr)
+				dest[i] = MonoStringToUTF8(reinterpret_cast<MonoString*>(element));
+			else
+				dest[i] = T{};
+		} else if constexpr (std::is_same_v<T, char>) {
+			dest[i] = static_cast<char>(mono_array_get(array, char16_t, i));
+		} else {
+			dest[i] = mono_array_get(array, T, i);
 		}
+	}
+}
 
-		return true;
+ValueType MonoTypeToValueType(const char* typeName) {
+	static std::unordered_map<std::string, ValueType> valueTypeMap = {
+			{ "System.Void", ValueType::Void },
+			{ "System.Boolean", ValueType::Bool },
+			{ "System.Char", ValueType::Char16 },
+			{ "System.SByte", ValueType::Int8 },
+			{ "System.Int16", ValueType::Int16 },
+			{ "System.Int32", ValueType::Int32 },
+			{ "System.Int64", ValueType::Int64 },
+			{ "System.Byte", ValueType::UInt8 },
+			{ "System.UInt16", ValueType::UInt16 },
+			{ "System.UInt32", ValueType::UInt32 },
+			{ "System.UInt64", ValueType::UInt64 },
+			{ "System.IntPtr", ValueType::Pointer },
+			{ "System.UIntPtr", ValueType::Pointer },
+			{ "System.Single", ValueType::Float },
+			{ "System.Double", ValueType::Double },
+			{ "System.String", ValueType::String },
+			{ "System.Boolean[]", ValueType::ArrayBool },
+			{ "System.Char[]", ValueType::ArrayChar16 },
+			{ "System.SByte[]", ValueType::ArrayInt8 },
+			{ "System.Int16[]", ValueType::ArrayInt16 },
+			{ "System.Int32[]", ValueType::ArrayInt32 },
+			{ "System.Int64[]", ValueType::ArrayInt64 },
+			{ "System.Byte[]", ValueType::ArrayUInt8 },
+			{ "System.UInt16[]", ValueType::ArrayUInt16 },
+			{ "System.UInt32[]", ValueType::ArrayUInt32 },
+			{ "System.UInt64[]", ValueType::ArrayUInt64 },
+			{ "System.IntPtr[]", ValueType::ArrayPointer },
+			{ "System.UIntPtr[]", ValueType::ArrayPointer },
+			{ "System.Single[]", ValueType::ArrayFloat },
+			{ "System.Double[]", ValueType::ArrayDouble },
+			{ "System.String[]", ValueType::ArrayString },
+
+			{ "System.Boolean&", ValueType::Bool },
+			{ "System.Char&", ValueType::Char16 },
+			{ "System.SByte&", ValueType::Int8 },
+			{ "System.Int16&", ValueType::Int16 },
+			{ "System.Int32&", ValueType::Int32 },
+			{ "System.Int64&", ValueType::Int64 },
+			{ "System.Byte&", ValueType::UInt8 },
+			{ "System.UInt16&", ValueType::UInt16 },
+			{ "System.UInt32&", ValueType::UInt32 },
+			{ "System.UInt64&", ValueType::UInt64 },
+			{ "System.IntPtr&", ValueType::Pointer },
+			{ "System.UIntPtr&", ValueType::Pointer },
+			{ "System.Single&", ValueType::Float },
+			{ "System.Double&", ValueType::Double },
+			{ "System.String&", ValueType::String },
+			{ "System.Boolean[]&", ValueType::ArrayBool },
+			{ "System.Char[]&", ValueType::ArrayChar16 },
+			{ "System.SByte[]&", ValueType::ArrayInt8 },
+			{ "System.Int16[]&", ValueType::ArrayInt16 },
+			{ "System.Int32[]&", ValueType::ArrayInt32 },
+			{ "System.Int64[]&", ValueType::ArrayInt64 },
+			{ "System.Byte[]&", ValueType::ArrayUInt8 },
+			{ "System.UInt16[]&", ValueType::ArrayUInt16 },
+			{ "System.UInt32[]&", ValueType::ArrayUInt32 },
+			{ "System.UInt64[]&", ValueType::ArrayUInt64 },
+			{ "System.IntPtr[]&", ValueType::ArrayPointer },
+			{ "System.UIntPtr[]&", ValueType::ArrayPointer },
+			{ "System.Single[]&", ValueType::ArrayFloat },
+			{ "System.Double[]&", ValueType::ArrayDouble },
+			{ "System.String[]&", ValueType::ArrayString },
+
+			{ "System.Delegate", ValueType::Function },
+			{ "System.Func`1", ValueType::Function },
+			{ "System.Func`2", ValueType::Function },
+			{ "System.Func`3", ValueType::Function },
+			{ "System.Func`4", ValueType::Function },
+			{ "System.Func`5", ValueType::Function },
+			{ "System.Func`6", ValueType::Function },
+			{ "System.Func`7", ValueType::Function },
+			{ "System.Func`8", ValueType::Function },
+			{ "System.Func`9", ValueType::Function },
+			{ "System.Func`10", ValueType::Function },
+			{ "System.Func`11", ValueType::Function },
+			{ "System.Func`12", ValueType::Function },
+			{ "System.Func`13", ValueType::Function },
+			{ "System.Func`14", ValueType::Function },
+			{ "System.Func`15", ValueType::Function },
+			{ "System.Func`16", ValueType::Function },
+			{ "System.Func`17", ValueType::Function },
+			{ "System.Action", ValueType::Function },
+			{ "System.Action`1", ValueType::Function },
+			{ "System.Action`2", ValueType::Function },
+			{ "System.Action`3", ValueType::Function },
+			{ "System.Action`4", ValueType::Function },
+			{ "System.Action`5", ValueType::Function },
+			{ "System.Action`6", ValueType::Function },
+			{ "System.Action`7", ValueType::Function },
+			{ "System.Action`8", ValueType::Function },
+			{ "System.Action`9", ValueType::Function },
+			{ "System.Action`10", ValueType::Function },
+			{ "System.Action`11", ValueType::Function },
+			{ "System.Action`12", ValueType::Function },
+			{ "System.Action`13", ValueType::Function },
+			{ "System.Action`14", ValueType::Function },
+			{ "System.Action`15", ValueType::Function },
+			{ "System.Action`16", ValueType::Function },
+
+			{ "Plugify.Vector2", ValueType::Vector2 },
+			{ "Plugify.Vector3", ValueType::Vector3 },
+			{ "Plugify.Vector4", ValueType::Vector4 },
+			{ "Plugify.Matrix4x4", ValueType::Matrix4x4 },
+
+			{ "Plugify.Vector2&", ValueType::Vector2 },
+			{ "Plugify.Vector3&", ValueType::Vector3 },
+			{ "Plugify.Vector4&", ValueType::Vector4 },
+			{ "Plugify.Matrix4x4&", ValueType::Matrix4x4 },
+	};
+	auto it = valueTypeMap.find(typeName);
+	if (it != valueTypeMap.end())
+		return std::get<ValueType>(*it);
+	return ValueType::Invalid;
+}
+
+std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
+	MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
+	MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
+	MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
+	return MonoStringToUTF8(messageString);
+}
+
+MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
+	auto buffer = Utils::ReadBytes<char>(assemblyPath);
+	MonoImage* image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
+
+	if (status != MONO_IMAGE_OK)
+		return nullptr;
+
+	if (loadPDB) {
+		fs::path pdbPath(assemblyPath);
+		pdbPath.replace_extension(".pdb");
+
+		auto bytes = Utils::ReadBytes<mono_byte>(pdbPath);
+		mono_debug_open_image_from_memory(image, bytes.data(), static_cast<int>(bytes.size()));
+
+		// If pdf not load ?
 	}
 
-	void LoadSystemClass(std::vector<MonoClass*>& storage, const char* name) {
-		MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
-		if (klass != nullptr) storage.push_back(klass);
+	MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
+	mono_image_close(image);
+	return assembly;
+}
+
+AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& assemblyPath, bool loadPDB) {
+	std::error_code error;
+
+	if (!fs::exists(assemblyPath, error)) {
+		errors.emplace_back(assemblyPath.string());
+		return {};
 	}
 
-	ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, const char* name, int paramCount) {
-		MonoClass* klass = mono_class_from_name(image, "Plugify", name);
-		if (!klass) {
-			errors.emplace_back(name);
-			return {};
-		}
-		MonoMethod* ctor = mono_class_get_method_from_name(klass, ".ctor", paramCount);
-		if (!ctor) {
-			errors.emplace_back(std::format("{}::ctor", name));
-			return {};
-		}
-		return { klass, ctor };
+	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+
+	MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, loadPDB, status);
+	if (!assembly) {
+		errors.emplace_back(std::format("{} [{}]", assemblyPath.filename().string(), mono_image_strerror(status)));
+		return {};
 	}
 
-	AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& assemblyPath, bool loadPDB) {
-		std::error_code error;
-
-		if (!fs::exists(assemblyPath, error)) {
-			errors.emplace_back(assemblyPath.string());
-			return {};
-		}
-
-		MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-
-		MonoAssembly* assembly = utils::LoadMonoAssembly(assemblyPath, loadPDB, status);
-		if (!assembly) {
-			errors.emplace_back(std::format("{} [{}]", assemblyPath.filename().string(), mono_image_strerror(status)));
-			return {};
-		}
-
-		MonoImage* image = mono_assembly_get_image(assembly);
-		if (!image) {
-			errors.emplace_back(std::format("{}::image", assemblyPath.filename().string()));
-			return {};
-		}
-
-		return { assembly, image };
+	MonoImage* image = mono_assembly_get_image(assembly);
+	if (!image) {
+		errors.emplace_back(std::format("{}::image", assemblyPath.filename().string()));
+		return {};
 	}
 
-	std::vector<std::string_view> Split(std::string_view strv, std::string_view delims = " ") {
-		std::vector<std::string_view> output;
-		size_t first = 0;
+	return { assembly, image };
+}
 
-		while (first < strv.size()) {
-			const size_t second = strv.find_first_of(delims, first);
+void LoadSystemClass(std::vector<MonoClass*>& storage, const char* name) {
+	MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
+	if (klass != nullptr) storage.push_back(klass);
+}
 
-			if (first != second)
-				output.emplace_back(strv.substr(first, second-first));
-
-			if (second == std::string_view::npos)
-				break;
-
-			first = second + 1;
-		}
-
-		return output;
+ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, const char* name, int paramCount) {
+	MonoClass* klass = mono_class_from_name(image, "Plugify", name);
+	if (!klass) {
+		errors.emplace_back(name);
+		return {};
 	}
+	MonoMethod* ctor = mono_class_get_method_from_name(klass, ".ctor", paramCount);
+	if (!ctor) {
+		errors.emplace_back(std::format("{}::ctor", name));
+		return {};
+	}
+	return { klass, ctor };
+}
 
-#if MONOLM_PLATFORM_WINDOWS
-	std::string GetEnvVariable(const char* varName) {
-		DWORD size = GetEnvironmentVariableA(varName, NULL, 0);
-		std::string buffer(size, 0);
-		GetEnvironmentVariableA(varName, buffer.data(), size);
-		return buffer;
-	}
+template<typename T>
+void* AllocateMemory(ArgumentList& args) {
+	void* ptr = malloc(sizeof(T));
+	args.push_back(ptr);
+	return ptr;
+}
 
-	bool SetEnvVariable(const char* varName, const char* value) {
-		return SetEnvironmentVariableA(varName, value) != 0;
-	}
-#else
-	std::string GetEnvVariable(const char* varName) {
-		char* val = getenv(varName);
-		if (!val)
-			return {};
-		return val;
-	}
-
-	bool SetEnvVariable(const char* varName, const char* value) {
-		return setenv(varName, value, 1) == 0;
-	}
-#endif
-
-	template<typename T>
-	void* AllocateMemory(std::vector<void*>& args) {
-		void* ptr = malloc(sizeof(T));
-		args.push_back(ptr);
-		return ptr;
-	}
-
-	template<typename T>
-	void FreeMemory(void* ptr) {
-		reinterpret_cast<T*>(ptr)->~T();
-		free(ptr);
-	}
+template<typename T>
+void FreeMemory(void* ptr) {
+	reinterpret_cast<T*>(ptr)->~T();
+	free(ptr);
 }
 
 void FunctionRefQueueCallback(void* function) {
@@ -377,7 +312,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!settingsPath.has_value())
 		return ErrorData{ std::format("File '{}' has not been found", settingsFile) };
 
-	auto json = utils::ReadText(*settingsPath);
+	auto json = Utils::ReadText(*settingsPath);
 	auto settings = glz::read_json<MonoSettings>(json);
 	if (!settings.has_value())
 		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile, glz::format_error(settings.error(), json)) };
@@ -403,7 +338,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	{
 		fs::path assemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
 
-		_core = utils::LoadCoreAssembly(assemblyErrors, assemblyPath, _settings.enableDebugging);
+		_core = LoadCoreAssembly(assemblyErrors, assemblyPath, _settings.enableDebugging);
 
 		if (!assemblyErrors.empty()) {
 			std::string assemblies("Not found: " + assemblyErrors[0]);
@@ -415,11 +350,11 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	}
 
 	{
-		_plugin = utils::LoadCoreClass(assemblyErrors, _core.image, "Plugin", 9);
-		_vector2 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
-		_vector3 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
-		_vector4 = utils::LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
-		_matrix4x4 = utils::LoadCoreClass(assemblyErrors, _core.image, "Matrix4x4", 16);
+		_plugin = LoadCoreClass(assemblyErrors, _core.image, "Plugin", 9);
+		_vector2 = LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
+		_vector3 = LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
+		_vector4 = LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
+		_matrix4x4 = LoadCoreClass(assemblyErrors, _core.image, "Matrix4x4", 16);
 
 		if (!assemblyErrors.empty()) {
 			std::string classes("Not found: " + assemblyErrors[0]);
@@ -431,41 +366,41 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	}
 
 	/// Delegates
-	utils::LoadSystemClass(_funcClasses, "Func`1");
-	utils::LoadSystemClass(_funcClasses, "Func`2");
-	utils::LoadSystemClass(_funcClasses, "Func`3");
-	utils::LoadSystemClass(_funcClasses, "Func`4");
-	utils::LoadSystemClass(_funcClasses, "Func`5");
-	utils::LoadSystemClass(_funcClasses, "Func`6");
-	utils::LoadSystemClass(_funcClasses, "Func`7");
-	utils::LoadSystemClass(_funcClasses, "Func`8");
-	utils::LoadSystemClass(_funcClasses, "Func`9");
-	utils::LoadSystemClass(_funcClasses, "Func`10");
-	utils::LoadSystemClass(_funcClasses, "Func`11");
-	utils::LoadSystemClass(_funcClasses, "Func`12");
-	utils::LoadSystemClass(_funcClasses, "Func`13");
-	utils::LoadSystemClass(_funcClasses, "Func`14");
-	utils::LoadSystemClass(_funcClasses, "Func`15");
-	utils::LoadSystemClass(_funcClasses, "Func`16");
-	utils::LoadSystemClass(_funcClasses, "Func`17");
+	LoadSystemClass(_funcClasses, "Func`1");
+	LoadSystemClass(_funcClasses, "Func`2");
+	LoadSystemClass(_funcClasses, "Func`3");
+	LoadSystemClass(_funcClasses, "Func`4");
+	LoadSystemClass(_funcClasses, "Func`5");
+	LoadSystemClass(_funcClasses, "Func`6");
+	LoadSystemClass(_funcClasses, "Func`7");
+	LoadSystemClass(_funcClasses, "Func`8");
+	LoadSystemClass(_funcClasses, "Func`9");
+	LoadSystemClass(_funcClasses, "Func`10");
+	LoadSystemClass(_funcClasses, "Func`11");
+	LoadSystemClass(_funcClasses, "Func`12");
+	LoadSystemClass(_funcClasses, "Func`13");
+	LoadSystemClass(_funcClasses, "Func`14");
+	LoadSystemClass(_funcClasses, "Func`15");
+	LoadSystemClass(_funcClasses, "Func`16");
+	LoadSystemClass(_funcClasses, "Func`17");
 
-	utils::LoadSystemClass(_actionClasses, "Action");
-	utils::LoadSystemClass(_actionClasses, "Action`1");
-	utils::LoadSystemClass(_actionClasses, "Action`2");
-	utils::LoadSystemClass(_actionClasses, "Action`3");
-	utils::LoadSystemClass(_actionClasses, "Action`4");
-	utils::LoadSystemClass(_actionClasses, "Action`5");
-	utils::LoadSystemClass(_actionClasses, "Action`6");
-	utils::LoadSystemClass(_actionClasses, "Action`7");
-	utils::LoadSystemClass(_actionClasses, "Action`8");
-	utils::LoadSystemClass(_actionClasses, "Action`9");
-	utils::LoadSystemClass(_actionClasses, "Action`10");
-	utils::LoadSystemClass(_actionClasses, "Action`11");
-	utils::LoadSystemClass(_actionClasses, "Action`12");
-	utils::LoadSystemClass(_actionClasses, "Action`13");
-	utils::LoadSystemClass(_actionClasses, "Action`14");
-	utils::LoadSystemClass(_actionClasses, "Action`15");
-	utils::LoadSystemClass(_actionClasses, "Action`16");
+	LoadSystemClass(_actionClasses, "Action");
+	LoadSystemClass(_actionClasses, "Action`1");
+	LoadSystemClass(_actionClasses, "Action`2");
+	LoadSystemClass(_actionClasses, "Action`3");
+	LoadSystemClass(_actionClasses, "Action`4");
+	LoadSystemClass(_actionClasses, "Action`5");
+	LoadSystemClass(_actionClasses, "Action`6");
+	LoadSystemClass(_actionClasses, "Action`7");
+	LoadSystemClass(_actionClasses, "Action`8");
+	LoadSystemClass(_actionClasses, "Action`9");
+	LoadSystemClass(_actionClasses, "Action`10");
+	LoadSystemClass(_actionClasses, "Action`11");
+	LoadSystemClass(_actionClasses, "Action`12");
+	LoadSystemClass(_actionClasses, "Action`13");
+	LoadSystemClass(_actionClasses, "Action`14");
+	LoadSystemClass(_actionClasses, "Action`15");
+	LoadSystemClass(_actionClasses, "Action`16");
 
 	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
 
@@ -519,7 +454,7 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optiona
 	mono_trace_set_log_handler(OnLogCallback, nullptr);
 
 	std::error_code error;
-	std::string monoEnvPath(utils::GetEnvVariable("MONO_PATH"));
+	std::string monoEnvPath(Utils::GetEnvVariable("MONO_PATH"));
 	if (fs::exists(monoPath, error)) {
 		for (const auto& entry : fs::directory_iterator(monoPath, error)) {
 			if (entry.is_directory(error)) {
@@ -529,7 +464,7 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optiona
 			}
 		}
 	}
-	//utils::SetEnvVariable("MONO_PATH", monoEnvPath.c_str());
+	//SetEnvVariable("MONO_PATH", monoEnvPath.c_str());
 	mono_set_assemblies_path(monoEnvPath.c_str());
 
 	// Seems we can write custom assembly loader here
@@ -597,23 +532,23 @@ void CSharpLanguageModule::ShutdownMono() {
 }
 
 template<typename T>
-void* CSharpLanguageModule::MonoStructToArg(std::vector<void*>& args) {
+void* CSharpLanguageModule::MonoStructToArg(ArgumentList& args) {
 	auto* dest = new T();
 	args.push_back(dest);
 	return dest;
 }
 
 template<typename T>
-void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, std::vector<void*>& args) {
+void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, ArgumentList& args) {
 	auto* dest = new std::vector<T>();
 	if (source != nullptr) {
-		utils::MonoArrayToVector(source, *dest);
+		MonoArrayToVector(source, *dest);
 	}
 	args.push_back(dest);
 	return dest;
 }
 
-void* CSharpLanguageModule::MonoStringToArg(MonoString* source, std::vector<void*>& args) {
+void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& args) {
 	std::string* dest;
 	if (source != nullptr) {
 		MonoError error;
@@ -662,10 +597,10 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 
 	void* methodAddr;
 
-	if (utils::IsMethodPrimitive(method)) {
+	if (IsMethodPrimitive(method)) {
 		methodAddr = mono_delegate_to_ftnptr(source);
 	} else {
-		auto function = new plugify::Function(_rt);
+		auto* function = new plugify::Function(_rt);
 		methodAddr = function->GetJitFunc(method, &DelegateCall, source);
 		mono_gc_reference_queue_add(_functionReferenceQueue, reinterpret_cast<MonoObject*>(source), reinterpret_cast<void*>(function));
 	}
@@ -689,7 +624,7 @@ void CSharpLanguageModule::CleanupDelegateCache() {
 void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	// TODO: Does mutex here good choose ?
 	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
-	std::vector<void*> args;
+	ArgumentList args;
 
 	DCCallVM* vm = g_monolm._callVirtMachine.get();
 	dcReset(vm);
@@ -701,66 +636,66 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 
 	switch (method->retType.type) {
 		/*case ValueType::Vector2:
-			dcArgPointer(vm, utils::AllocateMemory<plugify::Vector2>(args));
+			dcArgPointer(vm, AllocateMemory<plugify::Vector2>(args));
 			break;
 		case ValueType::Vector3:
-			dcArgPointer(vm, utils::AllocateMemory<plugify::Vector3>(args));
+			dcArgPointer(vm, AllocateMemory<plugify::Vector3>(args));
 			break;
 		case ValueType::Vector4:
-			dcArgPointer(vm, utils::AllocateMemory<plugify::Vector4>(args));
+			dcArgPointer(vm, AllocateMemory<plugify::Vector4>(args));
 			break;
 		case ValueType::Matrix4x4:
-			dcArgPointer(vm, utils::AllocateMemory<plugify::Matrix4x4>(args));
+			dcArgPointer(vm, AllocateMemory<plugify::Matrix4x4>(args));
 			break;*/
 		// MonoString*
 		case ValueType::String:
-			dcArgPointer(vm, utils::AllocateMemory<std::string>(args));
+			dcArgPointer(vm, AllocateMemory<std::string>(args));
 			break;
 		// MonoArray*
 		case ValueType::ArrayBool:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<bool>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<bool>>(args));
 			break;
 		case ValueType::ArrayChar8:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<char>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<char>>(args));
 			break;
 		case ValueType::ArrayChar16:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<char16_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<char16_t>>(args));
 			break;
 		case ValueType::ArrayInt8:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<int8_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<int8_t>>(args));
 			break;
 		case ValueType::ArrayInt16:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<int16_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<int16_t>>(args));
 			break;
 		case ValueType::ArrayInt32:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<int32_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<int32_t>>(args));
 			break;
 		case ValueType::ArrayInt64:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<int64_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<int64_t>>(args));
 			break;
 		case ValueType::ArrayUInt8:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<uint8_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<uint8_t>>(args));
 			break;
 		case ValueType::ArrayUInt16:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<uint16_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<uint16_t>>(args));
 			break;
 		case ValueType::ArrayUInt32:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<uint32_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<uint32_t>>(args));
 			break;
 		case ValueType::ArrayUInt64:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<uint64_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<uint64_t>>(args));
 			break;
 		case ValueType::ArrayPointer:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<uintptr_t>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<uintptr_t>>(args));
 			break;
 		case ValueType::ArrayFloat:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<float>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<float>>(args));
 			break;
 		case ValueType::ArrayDouble:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<double>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<double>>(args));
 			break;
 		case ValueType::ArrayString:
-			dcArgPointer(vm, utils::AllocateMemory<std::vector<std::string>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<std::string>>(args));
 			break;
 		default:
 			// Should not require storage
@@ -1088,64 +1023,48 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		case ValueType::Vector2: {
-			auto dcStruct = dcNewStruct(2, DEFAULT_ALIGNMENT);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(dcStruct);
+			DCstruct* s = dcNewStruct(2, DEFAULT_ALIGNMENT);
+			for (int i = 0; i < 2; ++i)
+				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
+			dcCloseStruct(s);
 			Vector2 source;
-			dcCallStruct(vm, addr, dcStruct, &source);
+			dcCallStruct(vm, addr, s, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector2));
-			dcFreeStruct(dcStruct);
+			dcFreeStruct(s);
 			break;
 		}
 		case ValueType::Vector3: {
-			auto dcStruct = dcNewStruct(3, DEFAULT_ALIGNMENT);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(dcStruct);
+			DCstruct* s = dcNewStruct(3, DEFAULT_ALIGNMENT);
+			for (int i = 0; i < 3; ++i)
+				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
+			dcCloseStruct(s);
 			Vector3 source;
-			dcCallStruct(vm, addr, dcStruct, &source);
+			dcCallStruct(vm, addr, s, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector3));
-			dcFreeStruct(dcStruct);
+			dcFreeStruct(s);
 			break;
 		}
 		case ValueType::Vector4: {
-			auto dcStruct = dcNewStruct(4, DEFAULT_ALIGNMENT);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(dcStruct);
+			DCstruct* s = dcNewStruct(4, DEFAULT_ALIGNMENT);
+			for (int i = 0; i < 4; ++i)
+				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
+			dcCloseStruct(s);
+			dcCloseStruct(s);
 			Vector4 source;
-			dcCallStruct(vm, addr, dcStruct, &source);
+			dcCallStruct(vm, addr, s, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector4));
-			dcFreeStruct(dcStruct);
+			dcFreeStruct(s);
 			break;
 		}
 		case ValueType::Matrix4x4: {
-			auto dcStruct = dcNewStruct(16, DEFAULT_ALIGNMENT);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(dcStruct);
+			DCstruct* s = dcNewStruct(16, DEFAULT_ALIGNMENT);
+			for (int i = 0; i < 16; ++i)
+				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
+			dcCloseStruct(s);
 			Matrix4x4 source;
-			dcCallStruct(vm, addr, dcStruct, &source);
+			dcCallStruct(vm, addr, s, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._matrix4x4));
-			dcFreeStruct(dcStruct);
+			dcFreeStruct(s);
 			break;
 		}
 		case ValueType::String: {
@@ -1255,7 +1174,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	}
 }
 
-void CSharpLanguageModule::PullReferences(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const std::vector<void*>& args) {
+void CSharpLanguageModule::PullReferences(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
 	if (hasRefs) {
 		uint8_t j = hasRet; // skip first param if has return
 
@@ -1323,7 +1242,7 @@ void CSharpLanguageModule::PullReferences(const Method* method, const Parameters
 	}
 }
 
-void CSharpLanguageModule::DeleteParam(const std::vector<void*>& args, uint8_t& i, ValueType type) {
+void CSharpLanguageModule::DeleteParam(const ArgumentList& args, uint8_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::String:
 			delete reinterpret_cast<std::string*>(args[i++]);
@@ -1378,67 +1297,67 @@ void CSharpLanguageModule::DeleteParam(const std::vector<void*>& args, uint8_t& 
 	}
 }
 
-void CSharpLanguageModule::DeleteReturn(const std::vector<void*>& args, uint8_t& i, ValueType type) {
+void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, uint8_t& i, ValueType type) {
 	switch (type) {
 		/*case ValueType::Vector2:
-			utils::FreeMemory<plugify::Vector2>(args[i++]);
+			FreeMemory<plugify::Vector2>(args[i++]);
 			break;
 		case ValueType::Vector3:
-			utils::FreeMemory<plugify::Vector3>(args[i++]);
+			FreeMemory<plugify::Vector3>(args[i++]);
 			break;
 		case ValueType::Vector4:
-			utils::FreeMemory<plugify::Vector4>(args[i++]);
+			FreeMemory<plugify::Vector4>(args[i++]);
 			break;
 		case ValueType::Matrix4x4:
-			utils::FreeMemory<plugify::Matrix4x4>(args[i++]);
+			FreeMemory<plugify::Matrix4x4>(args[i++]);
 			break;*/
 		case ValueType::String:
-			utils::FreeMemory<std::string>(args[i++]);
+			FreeMemory<std::string>(args[i++]);
 			break;
 		case ValueType::ArrayBool:
-			utils::FreeMemory<std::vector<bool>>(args[i++]);
+			FreeMemory<std::vector<bool>>(args[i++]);
 			break;
 		case ValueType::ArrayChar8:
-			utils::FreeMemory<std::vector<char>>(args[i++]);
+			FreeMemory<std::vector<char>>(args[i++]);
 			break;
 		case ValueType::ArrayChar16:
-			utils::FreeMemory<std::vector<char16_t>>(args[i++]);
+			FreeMemory<std::vector<char16_t>>(args[i++]);
 			break;
 		case ValueType::ArrayInt8:
-			utils::FreeMemory<std::vector<int16_t>>(args[i++]);
+			FreeMemory<std::vector<int16_t>>(args[i++]);
 			break;
 		case ValueType::ArrayInt16:
-			utils::FreeMemory<std::vector<int16_t>>(args[i++]);
+			FreeMemory<std::vector<int16_t>>(args[i++]);
 			break;
 		case ValueType::ArrayInt32:
-			utils::FreeMemory<std::vector<int32_t>>(args[i++]);
+			FreeMemory<std::vector<int32_t>>(args[i++]);
 			break;
 		case ValueType::ArrayInt64:
-			utils::FreeMemory<std::vector<int64_t>>(args[i++]);
+			FreeMemory<std::vector<int64_t>>(args[i++]);
 			break;
 		case ValueType::ArrayUInt8:
-			utils::FreeMemory<std::vector<uint8_t>>(args[i++]);
+			FreeMemory<std::vector<uint8_t>>(args[i++]);
 			break;
 		case ValueType::ArrayUInt16:
-			utils::FreeMemory<std::vector<uint16_t>>(args[i++]);
+			FreeMemory<std::vector<uint16_t>>(args[i++]);
 			break;
 		case ValueType::ArrayUInt32:
-			utils::FreeMemory<std::vector<uint32_t>>(args[i++]);
+			FreeMemory<std::vector<uint32_t>>(args[i++]);
 			break;
 		case ValueType::ArrayUInt64:
-			utils::FreeMemory<std::vector<uint64_t>>(args[i++]);
+			FreeMemory<std::vector<uint64_t>>(args[i++]);
 			break;
 		case ValueType::ArrayPointer:
-			utils::FreeMemory<std::vector<uintptr_t>>(args[i++]);
+			FreeMemory<std::vector<uintptr_t>>(args[i++]);
 			break;
 		case ValueType::ArrayFloat:
-			utils::FreeMemory<std::vector<float>>(args[i++]);
+			FreeMemory<std::vector<float>>(args[i++]);
 			break;
 		case ValueType::ArrayDouble:
-			utils::FreeMemory<std::vector<double>>(args[i++]);
+			FreeMemory<std::vector<double>>(args[i++]);
 			break;
 		case ValueType::ArrayString:
-			utils::FreeMemory<std::vector<std::string>>(args[i++]);
+			FreeMemory<std::vector<std::string>>(args[i++]);
 			break;
 		default:
 			break;
@@ -1453,7 +1372,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 	bool hasRefs = false;
 	bool hasRet = ValueTypeIsHiddenObjectParam(method->retType.type);
 
-	std::vector<void*> args(hasRet ? count - 1 : count);
+	ArgumentList args(hasRet ? count - 1 : count);
 
 	SetParams(method, p, count, hasRet, hasRefs, args);
 
@@ -1472,13 +1391,13 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 
 // Call from C++ to C#
 void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
-	auto monoDelegate = reinterpret_cast<MonoObject*>(data);
+	auto* monoDelegate = reinterpret_cast<MonoObject*>(data);
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
 	bool hasRet = ValueTypeIsHiddenObjectParam(method->retType.type);
 
-	std::vector<void*> args(hasRet ? count - 1 : count);
+	ArgumentList args(hasRet ? count - 1 : count);
 
 	SetParams(method, p, count, hasRet, hasRefs, args);
 
@@ -1495,7 +1414,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 	SetReturn(method, p, ret, result);
 }
 
-void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, std::vector<void*>& args) {
+void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
 	for (uint8_t i = hasRet, j = 0; i < count; ++i) {
 		const auto& param = method->paramTypes[j];
 		if (param.ref) {
@@ -1705,15 +1624,15 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 	}
 }
 
-void CSharpLanguageModule::SetReferences(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const std::vector<void*>& args) {
+void CSharpLanguageModule::SetReferences(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
 	if (hasRefs) {
 		for (uint8_t i = hasRet, j = 0; i < count; ++i) {
 			const auto& param = method->paramTypes[j];
 			if (param.ref) {
 				switch (param.type) {
 					case ValueType::Char8: {
-						auto source = reinterpret_cast<char16_t*>(args[j]);
-						auto dest = p->GetArgument<char*>(i);
+						auto* source = reinterpret_cast<char16_t*>(args[j]);
+						auto* dest = p->GetArgument<char*>(i);
 						*dest = static_cast<char>(*source);
 						delete source;
 						break;
@@ -1721,8 +1640,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::String: {
 						auto source = reinterpret_cast<MonoString**>(args[j]);
 						if (source != nullptr)  {
-							auto dest = p->GetArgument<std::string*>(i);
-							*dest = utils::MonoStringToUTF8(source[0]);
+							auto* dest = p->GetArgument<std::string*>(i);
+							*dest = MonoStringToUTF8(source[0]);
 						}
 						delete[] source;
 						break;
@@ -1730,8 +1649,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayBool: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<bool>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<bool>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1739,8 +1658,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayChar8: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<char>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<char>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 					 	delete[] source;
 						break;
@@ -1748,8 +1667,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayChar16: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<char16_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<char16_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1757,8 +1676,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayInt8: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<int8_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<int8_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1766,8 +1685,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayInt16: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<int16_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<int16_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1775,8 +1694,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayInt32: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<int32_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<int32_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1784,8 +1703,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayInt64: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<int64_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<int64_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1793,8 +1712,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayUInt8: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<uint8_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<uint8_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1802,8 +1721,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayUInt16: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<uint16_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<uint16_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1811,8 +1730,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayUInt32: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<uint32_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<uint32_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1820,8 +1739,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayUInt64: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<uint64_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<uint64_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1829,8 +1748,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayPointer: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<uintptr_t>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<uintptr_t>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1838,8 +1757,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayFloat: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<float>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<float>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1847,8 +1766,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayDouble: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<double>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<double>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1856,8 +1775,8 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 					case ValueType::ArrayString: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto dest = p->GetArgument<std::vector<std::string>*>(i);
-							utils::MonoArrayToVector(source[0], *dest);
+							auto* dest = p->GetArgument<std::vector<std::string>*>(i);
+							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
 						break;
@@ -1868,7 +1787,6 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 			} else {
 				if (param.type == ValueType::Char8) {
 					delete reinterpret_cast<char16_t*>(args[j]);
-					break;
 				}
 			}
 			++j;
@@ -1881,6 +1799,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 		switch (method->retType.type) {
 			case ValueType::Invalid:
 			case ValueType::Void:
+				break;
 			case ValueType::Bool: {
 				bool val = *reinterpret_cast<bool*>(mono_object_unbox(result));
 				ret->SetReturnPtr(val);
@@ -1952,187 +1871,187 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 				break;
 			}
 			case ValueType::Vector2: {
-				auto source = reinterpret_cast<Vector2*>(mono_object_unbox(result));
-				ret->SetReturnPtr(*source);
+				Vector2 source = *reinterpret_cast<Vector2*>(mono_object_unbox(result));
+				ret->SetReturnPtr(source);
 				break;
 			}
 #if MONOLM_PLATFORM_WINDOWS
 			case ValueType::Vector3: {
-				auto source = reinterpret_cast<Vector3*>(mono_object_unbox(result));
-				auto dest = p->GetArgument<Vector3*>(0);
+				auto* source = reinterpret_cast<Vector3*>(mono_object_unbox(result));
+				auto* dest = p->GetArgument<Vector3*>(0);
 				*dest = *source;
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::Vector4: {
-				auto source = reinterpret_cast<Vector4*>(mono_object_unbox(result));
-				auto dest = p->GetArgument<Vector4*>(0);
+				auto* source = reinterpret_cast<Vector4*>(mono_object_unbox(result));
+				auto* dest = p->GetArgument<Vector4*>(0);
 				*dest = *source;
 				ret->SetReturnPtr(dest);
 				break;
 			}
 #else
 			case ValueType::Vector3: {
-				auto source = reinterpret_cast<Vector3*>(mono_object_unbox(result));
-				ret->SetReturnPtr(*source);
+				Vector3 source = *reinterpret_cast<Vector3*>(mono_object_unbox(result));
+				ret->SetReturnPtr(source);
 				break;
 			}
 			case ValueType::Vector4: {
-				auto source = reinterpret_cast<Vector4*>(mono_object_unbox(result));
-				ret->SetReturnPtr(*source);
+				Vector4 source = *reinterpret_cast<Vector4*>(mono_object_unbox(result));
+				ret->SetReturnPtr(source);
 				break;
 			}
 #endif
 			case ValueType::Matrix4x4: {
-				auto source = reinterpret_cast<Matrix4x4*>(mono_object_unbox(result));
-				auto dest = p->GetArgument<Matrix4x4*>(0);
+				auto* source = reinterpret_cast<Matrix4x4*>(mono_object_unbox(result));
+				auto* dest = p->GetArgument<Matrix4x4*>(0);
 				*dest = *source;
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::Function: {
-				auto source = reinterpret_cast<MonoDelegate*>(result);
+				auto* source = reinterpret_cast<MonoDelegate*>(result);
 				ret->SetReturnPtr(g_monolm.MonoDelegateToArg(source, *(method->retType.prototype)));
 				break;
 			}
 			case ValueType::String: {
-				auto source = reinterpret_cast<MonoString*>(result);
-				auto dest = p->GetArgument<std::string*>(0);
-				std::construct_at(dest, utils::MonoStringToUTF8(source));
+				auto* source = reinterpret_cast<MonoString*>(result);
+				auto* dest = p->GetArgument<std::string*>(0);
+				std::construct_at(dest, MonoStringToUTF8(source));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayBool: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<bool>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<bool>*>(0);
 				std::vector<bool> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayChar8: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<char>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<char>*>(0);
 				std::vector<char> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayChar16: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<char16_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<char16_t>*>(0);
 				std::vector<char16_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayInt8: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<int8_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<int8_t>*>(0);
 				std::vector<int8_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayInt16: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<int16_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<int16_t>*>(0);
 				std::vector<int16_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayInt32: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<int32_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<int32_t>*>(0);
 				std::vector<int32_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayInt64: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<int64_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<int64_t>*>(0);
 				std::vector<int64_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayUInt8: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<uint8_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<uint8_t>*>(0);
 				std::vector<uint8_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayUInt16: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<uint16_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<uint16_t>*>(0);
 				std::vector<uint16_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayUInt32: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<uint32_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<uint32_t>*>(0);
 				std::vector<uint32_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayUInt64: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<uint64_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<uint64_t>*>(0);
 				std::vector<uint64_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayPointer: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<uintptr_t>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<uintptr_t>*>(0);
 				std::vector<uintptr_t> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayFloat: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<float>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<float>*>(0);
 				std::vector<float> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayDouble: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<double>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<double>*>(0);
 				std::vector<double> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::ArrayString: {
-				auto source = reinterpret_cast<MonoArray*>(result);
-				auto dest = p->GetArgument<std::vector<std::string>*>(0);
+				auto* source = reinterpret_cast<MonoArray*>(result);
+				auto* dest = p->GetArgument<std::vector<std::string>*>(0);
 				std::vector<std::string> storage;
-				utils::MonoArrayToVector(source, storage);
+				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
 				break;
@@ -2155,7 +2074,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 	fs::path assemblyPath(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint);
 
-	MonoAssembly* assembly = utils::LoadMonoAssembly(assemblyPath, _settings.enableDebugging, status);
+	MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, _settings.enableDebugging, status);
 	if (!assembly)
 		return ErrorData{ std::format("Failed to load assembly: '{}'", mono_image_strerror(status)) };
 
@@ -2175,7 +2094,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 	methods.reserve(exportedMethods.size());
 
 	for (const auto& method : exportedMethods) {
-		auto seperated = utils::Split(method.funcName, ".");
+		auto seperated = Utils::Split(method.funcName, ".");
 		if (seperated.size() != 3) {
 			methodErrors.emplace_back(std::format("Invalid function name: '{}'. Please provide name in that format: 'Namespace.Class.Method'", method.funcName));
 			continue;
@@ -2215,7 +2134,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		MonoType* returnType = mono_signature_get_return_type(sig);
 		char* returnTypeName = mono_type_get_name(returnType);
-		ValueType retType = utils::MonoTypeToValueType(returnTypeName);
+		ValueType retType = MonoTypeToValueType(returnTypeName);
 
 		if (retType == ValueType::Invalid) {
 			MonoClass* returnClass = mono_class_from_mono_type(returnType);
@@ -2246,7 +2165,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		void* iter = nullptr;
 		while (MonoType* type = mono_signature_get_params(sig, &iter)) {
 			char* paramTypeName = mono_type_get_name(type);
-			ValueType paramType = utils::MonoTypeToValueType(paramTypeName);
+			ValueType paramType = MonoTypeToValueType(paramTypeName);
 
 			if (paramType == ValueType::Invalid) {
 				MonoClass* paramClass = mono_class_from_mono_type(type);
@@ -2315,7 +2234,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 
 		for (const auto& method : plugin.GetDescriptor().exportedMethods) {
 			if (name == method.name) {
-				if (utils::IsMethodPrimitive(method)) {
+				if (IsMethodPrimitive(method)) {
 					mono_add_internal_call(funcName.c_str(), addr);
 				} else {
 					Function function(_rt);
@@ -2399,10 +2318,10 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 
 	MonoClass* delegateClass = delegateClasses[paramCount];
 
-	if (utils::IsMethodPrimitive(method)) {
+	if (IsMethodPrimitive(method)) {
 		return mono_ftnptr_to_delegate(delegateClass, func);
 	} else {
-		auto function = new plugify::Function(_rt);
+		auto* function = new plugify::Function(_rt);
 		void* methodAddr = function->GetJitFunc(method, &ExternalCall, func);
 		MonoDelegate* delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
 		mono_gc_reference_queue_add(_functionReferenceQueue, reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
@@ -2431,7 +2350,7 @@ MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, Mono
 template<typename T>
 MonoObject* CSharpLanguageModule::CreateObject(T& source, const ClassInfo& info) {
 	MonoObject* instance = mono_object_new(_appDomain, info.klass);
-	std::vector<void*> args;
+	ArgumentList args;
 	args.resize(source.data.size());
 	for (auto& e : source.data) {
 		args.push_back(&e);
@@ -2467,29 +2386,31 @@ void CSharpLanguageModule::HandleException(MonoObject* exc, void* /* userData*/)
 
 	std::string result(LOG_PREFIX "[Exception] ");
 
-	std::string message = utils::GetStringProperty("Message", exceptionClass, exc);
+	std::string message = GetStringProperty("Message", exceptionClass, exc);
 	if (!message.empty()) {
 		std::format_to(std::back_inserter(result), " | Message: {}", message);
 	}
 
-	/*std::string source = utils::GetStringProperty("Source", exceptionClass, exc);
+	/*std::string source = GetStringProperty("Source", exceptionClass, exc);
 	if (!source.empty()) {
 		std::format_to(std::back_inserter(result), " | Source: {}", source);
 	}*/
 
-	std::string stackTrace = utils::GetStringProperty("StackTrace", exceptionClass, exc);
+	std::string stackTrace = GetStringProperty("StackTrace", exceptionClass, exc);
 	if (!stackTrace.empty()) {
 		std::format_to(std::back_inserter(result), " | StackTrace: {}", stackTrace);
 	}
 
-	/*std::string targetSite = utils::GetStringProperty("TargetSite", exceptionClass, exc);
+	/*std::string targetSite = GetStringProperty("TargetSite", exceptionClass, exc);
 	if (!targetSite.empty()) {
 		std::format_to(std::back_inserter(result), " | TargetSite: {}", targetSite);
 	}*/
 
-	cpptrace::generate_trace().print();
-
 	g_monolm._provider->Log(result, Severity::Error);
+
+	std::stringstream stream;
+	cpptrace::generate_trace().print(stream);
+	g_monolm._provider->Log(stream.str(), Severity::Debug);
 }
 
 void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logLevel, const char* message, mono_bool fatal, void* /* userData*/) {
@@ -2522,14 +2443,16 @@ void CSharpLanguageModule::OnLogCallback(const char* logDomain, const char* logL
 		}
 	}
 
-	if (fatal) {
-		cpptrace::generate_trace().print();
-	}
-
 	if (!logDomain || strlen(logDomain) == 0) {
 		g_monolm._provider->Log(std::format(LOG_PREFIX "{}", message), fatal ? Severity::Fatal : severity);
 	} else {
 		g_monolm._provider->Log(std::format(LOG_PREFIX "[{}] {}", logDomain, message), fatal ? Severity::Fatal : severity);
+	}
+
+	if (fatal || severity <= Severity::Error) {
+		std::stringstream stream;
+		cpptrace::generate_trace().print(stream);
+		g_monolm._provider->Log(stream.str(), Severity::Debug);
 	}
 }
 
