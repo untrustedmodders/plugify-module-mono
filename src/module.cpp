@@ -1092,9 +1092,9 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcCloseStruct(dcStruct);
-			DCpointer output;
-			dcCallStruct(vm, addr, dcStruct, &output);
-			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Vector2*>(output), g_monolm._vector2));
+			Vector2 source;
+			dcCallStruct(vm, addr, dcStruct, &source);
+			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector2));
 			dcFreeStruct(dcStruct);
 			break;
 		}
@@ -1104,9 +1104,9 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcCloseStruct(dcStruct);
-			DCpointer output;
-			dcCallStruct(vm, addr, dcStruct, &output);
-			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Vector3*>(output), g_monolm._vector3));
+			Vector3 source;
+			dcCallStruct(vm, addr, dcStruct, &source);
+			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector3));
 			dcFreeStruct(dcStruct);
 			break;
 		}
@@ -1117,9 +1117,9 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcCloseStruct(dcStruct);
-			DCpointer output;
-			dcCallStruct(vm, addr, dcStruct, &output);
-			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Vector4*>(output), g_monolm._vector4));
+			Vector4 source;
+			dcCallStruct(vm, addr, dcStruct, &source);
+			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector4));
 			dcFreeStruct(dcStruct);
 			break;
 		}
@@ -1142,9 +1142,9 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcStructField(dcStruct, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
 			dcCloseStruct(dcStruct);
-			DCpointer output;
-			dcCallStruct(vm, addr, dcStruct, &output);
-			ret->SetReturnPtr(g_monolm.CreateObject(*reinterpret_cast<plugify::Matrix4x4*>(output), g_monolm._matrix4x4));
+			Matrix4x4 source;
+			dcCallStruct(vm, addr, dcStruct, &source);
+			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._matrix4x4));
 			dcFreeStruct(dcStruct);
 			break;
 		}
