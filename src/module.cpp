@@ -50,11 +50,11 @@ using namespace plugify;
 bool IsMethodPrimitive(const plugify::Method& method) {
 	// char8 is exception among primitive types
 
-	if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
+	if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive))
 		return false;
 
 	for (const auto& param : method.paramTypes) {
-		if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive && param.type < ValueType::FirstPOD))
+		if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive))
 			return false;
 	}
 
@@ -1023,48 +1023,47 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		case ValueType::Vector2: {
-			DCstruct* s = dcNewStruct(2, DEFAULT_ALIGNMENT);
+			DCaggr* ag = dcNewAggr(2, sizeof(Vector2));
 			for (int i = 0; i < 2; ++i)
-				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(s);
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
 			Vector2 source;
-			dcCallStruct(vm, addr, s, &source);
+			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector2));
-			dcFreeStruct(s);
+			dcFreeAggr(ag);
 			break;
 		}
 		case ValueType::Vector3: {
-			DCstruct* s = dcNewStruct(3, DEFAULT_ALIGNMENT);
+			DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
 			for (int i = 0; i < 3; ++i)
-				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(s);
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
 			Vector3 source;
-			dcCallStruct(vm, addr, s, &source);
+			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector3));
-			dcFreeStruct(s);
+			dcFreeAggr(ag);
 			break;
 		}
 		case ValueType::Vector4: {
-			DCstruct* s = dcNewStruct(4, DEFAULT_ALIGNMENT);
+			DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
 			for (int i = 0; i < 4; ++i)
-				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(s);
-			dcCloseStruct(s);
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
 			Vector4 source;
-			dcCallStruct(vm, addr, s, &source);
+			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector4));
-			dcFreeStruct(s);
+			dcFreeAggr(ag);
 			break;
 		}
 		case ValueType::Matrix4x4: {
-			DCstruct* s = dcNewStruct(16, DEFAULT_ALIGNMENT);
+			DCaggr* ag = dcNewAggr(16, sizeof(Matrix4x4));
 			for (int i = 0; i < 16; ++i)
-				dcStructField(s, DC_SIGCHAR_FLOAT, DEFAULT_ALIGNMENT, 1);
-			dcCloseStruct(s);
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
 			Matrix4x4 source;
-			dcCallStruct(vm, addr, s, &source);
+			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._matrix4x4));
-			dcFreeStruct(s);
+			dcFreeAggr(ag);
 			break;
 		}
 		case ValueType::String: {
