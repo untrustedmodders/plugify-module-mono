@@ -351,10 +351,10 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	{
 		_plugin = LoadCoreClass(assemblyErrors, _core.image, "Plugin", 9);
-		_vector2 = LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
-		_vector3 = LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
-		_vector4 = LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
-		_matrix4x4 = LoadCoreClass(assemblyErrors, _core.image, "Matrix4x4", 16);
+		//_vector2 = LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
+		//_vector3 = LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
+		//_vector4 = LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
+		//_matrix4x4 = LoadCoreClass(assemblyErrors, _core.image, "Matrix4x4", 16);
 
 		if (!assemblyErrors.empty()) {
 			std::string classes("Not found: " + assemblyErrors[0]);
@@ -1029,10 +1029,34 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcCloseAggr(ag);
 			Vector2 source;
 			dcCallAggr(vm, addr, ag, &source);
-			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector2));
+			ret->SetReturnPtr(source);
 			dcFreeAggr(ag);
 			break;
 		}
+#if MONOLM_PLATFORM_WINDOWS
+		case ValueType::Vector3: {
+			DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
+			for (int i = 0; i < 3; ++i)
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
+			auto* dest = p->GetArgument<Vector3*>(0);
+			dcCallAggr(vm, addr, ag, dest);
+			ret->SetReturnPtr(dest);
+			dcFreeAggr(ag);
+			break;
+		}
+		case ValueType::Vector4: {
+			DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
+			for (int i = 0; i < 4; ++i)
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
+			auto* dest = p->GetArgument<Vector4*>(0);
+			dcCallAggr(vm, addr, ag, dest);
+			ret->SetReturnPtr(dest);
+			dcFreeAggr(ag);
+			break;
+		}
+#else
 		case ValueType::Vector3: {
 			DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
 			for (int i = 0; i < 3; ++i)
@@ -1040,7 +1064,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcCloseAggr(ag);
 			Vector3 source;
 			dcCallAggr(vm, addr, ag, &source);
-			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector3));
+			ret->SetReturnPtr(source);
 			dcFreeAggr(ag);
 			break;
 		}
@@ -1051,18 +1075,18 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcCloseAggr(ag);
 			Vector4 source;
 			dcCallAggr(vm, addr, ag, &source);
-			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._vector4));
+			ret->SetReturnPtr(source);
 			dcFreeAggr(ag);
-			break;
 		}
+#endif
 		case ValueType::Matrix4x4: {
 			DCaggr* ag = dcNewAggr(16, sizeof(Matrix4x4));
 			for (int i = 0; i < 16; ++i)
 				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
 			dcCloseAggr(ag);
-			Matrix4x4 source;
-			dcCallAggr(vm, addr, ag, &source);
-			ret->SetReturnPtr(g_monolm.CreateObject(source, g_monolm._matrix4x4));
+			auto* dest = p->GetArgument<Matrix4x4*>(0);
+			dcCallAggr(vm, addr, ag, dest);
+			ret->SetReturnPtr(dest);
 			dcFreeAggr(ag);
 			break;
 		}
@@ -2344,18 +2368,6 @@ MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, Mono
 		}
 	}
 	return array;
-}
-
-template<typename T>
-MonoObject* CSharpLanguageModule::CreateObject(T& source, const ClassInfo& info) {
-	MonoObject* instance = mono_object_new(_appDomain, info.klass);
-	ArgumentList args;
-	args.resize(source.data.size());
-	for (auto& e : source.data) {
-		args.push_back(&e);
-	}
-	mono_runtime_invoke(info.ctor, instance, args.data(), nullptr);
-	return instance;
 }
 
 MonoArray* CSharpLanguageModule::CreateArray(MonoClass* klass, size_t count) const {

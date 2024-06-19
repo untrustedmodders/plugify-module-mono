@@ -114,8 +114,6 @@ namespace monolm {
 
 		template<typename T>
 		MonoArray* CreateArrayT(const std::vector<T>& source, MonoClass* klass);
-		template<typename T>
-		MonoObject* CreateObject(T& source, const ClassInfo& info);
 		MonoDelegate* CreateDelegate(void* func, const plugify::Method& method);
 		template<typename T>
 		MonoString* CreateString(const T& source) const;
@@ -165,10 +163,10 @@ namespace monolm {
 		AssemblyInfo _core;
 
 		ClassInfo _plugin;
-		ClassInfo _vector2;
-		ClassInfo _vector3;
-		ClassInfo _vector4;
-		ClassInfo _matrix4x4;
+		//ClassInfo _vector2;
+		//ClassInfo _vector3;
+		//ClassInfo _vector4;
+		//ClassInfo _matrix4x4;
 
 		std::shared_ptr<asmjit::JitRuntime> _rt;
 		std::shared_ptr<plugify::IPlugifyProvider> _provider;
