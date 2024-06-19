@@ -50,11 +50,11 @@ using namespace plugify;
 bool IsMethodPrimitive(const plugify::Method& method) {
 	// char8 is exception among primitive types
 
-	if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive))
+	if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
 		return false;
 
 	for (const auto& param : method.paramTypes) {
-		if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive))
+		if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
 			return false;
 	}
 
@@ -2261,7 +2261,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 					mono_add_internal_call(funcName.c_str(), addr);
 				} else {
 					Function function(_rt);
-					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr, false);
+					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return type >= ValueType::HiddenParam; });
 					if (!methodAddr) {
 						_provider->Log(std::format(LOG_PREFIX "{}: {}", method.funcName, function.GetError()), Severity::Error);
 						continue;
