@@ -87,12 +87,6 @@ namespace monolm {
 		MonoMethod* ctor{ nullptr };
 	};
 
-	struct VMDeleter {
-		void operator()(DCCallVM* vm) const {
-			dcFree(vm);
-		}
-	};
-
 	class CSharpLanguageModule final : public plugify::ILanguageModule {
 	public:
 		CSharpLanguageModule() = default;
@@ -110,7 +104,6 @@ namespace monolm {
 		ScriptOpt FindScript(const std::string& name);
 
 		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
-		MonoAssemblyName* GetAssemblyName() { return _assemblyName; }
 
 		template<typename T>
 		MonoArray* CreateArrayT(const std::vector<T>& source, MonoClass* klass);
@@ -155,13 +148,12 @@ namespace monolm {
 		void CleanupDelegateCache();
 
 	private:
-		MonoDomain* _rootDomain{ nullptr };
-		MonoDomain* _appDomain{ nullptr };
-		MonoReferenceQueue* _functionReferenceQueue{ nullptr };
-		MonoAssemblyName* _assemblyName{ nullptr };
+		std::deleted_unique_ptr<MonoDomain> _rootDomain;
+		std::deleted_unique_ptr<MonoDomain> _appDomain;
+		std::deleted_unique_ptr<MonoReferenceQueue> _functionReferenceQueue;
+		std::deleted_unique_ptr<MonoAssemblyName> _assemblyName;
 
 		AssemblyInfo _core;
-
 		ClassInfo _plugin;
 		//ClassInfo _vector2;
 		//ClassInfo _vector3;
@@ -177,7 +169,7 @@ namespace monolm {
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::unordered_map<void*, plugify::Function> _functions;
 
-		std::unique_ptr<DCCallVM, VMDeleter> _callVirtMachine;
+		std::deleted_unique_ptr<DCCallVM> _callVirtMachine;
 		std::map<uint32_t, void*> _cachedDelegates;
 		std::mutex _mutex;
 

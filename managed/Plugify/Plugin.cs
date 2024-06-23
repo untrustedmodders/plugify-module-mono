@@ -3,7 +3,7 @@
 namespace Plugify
 {
 	/// <summary>
-	/// Class which every c# plugin must implement.
+	/// Class which every c# (mono) plugin must implement.
 	/// </summary>
 	public class Plugin : IEquatable<Plugin>, IComparable<Plugin>
 	{

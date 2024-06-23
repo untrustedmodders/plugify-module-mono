@@ -67,7 +67,7 @@ std::string monolm::MonoStringToUTF8(MonoString* string) {
 	MonoError error;
 	char* utf8 = mono_string_to_utf8_checked(string, &error);
 	if (!mono_error_ok(&error)) {
-		g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+		g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: ({}) {}.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
 		mono_error_cleanup(&error);
 		return {};
 	}
@@ -235,7 +235,6 @@ MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoI
 
 		// If pdf not load ?
 	}
-
 	MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
 	mono_image_close(image);
 	return assembly;
@@ -253,7 +252,7 @@ AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& 
 
 	MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, loadPDB, status);
 	if (!assembly) {
-		errors.emplace_back(std::format("{} [{}]", assemblyPath.filename().string(), mono_image_strerror(status)));
+		errors.emplace_back(std::format("{} ({})", assemblyPath.filename().string(), mono_image_strerror(status)));
 		return {};
 	}
 
@@ -330,8 +329,12 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	// Create an app domain
 	char appName[] = "PlugifyMonoRuntime";
-	_appDomain = mono_domain_create_appdomain(appName, nullptr);
-	mono_domain_set(_appDomain, true);
+	MonoDomain* appDomain = mono_domain_create_appdomain(appName, nullptr);
+	if (!appDomain)
+		return ErrorData{ "Initialization of PlugifyMonoRuntime domain failed" };
+
+	mono_domain_set(appDomain, true);
+	_appDomain = std::deleted_unique_ptr<MonoDomain>(appDomain, mono_domain_unload);
 
 	std::vector<std::string> assemblyErrors;
 
@@ -402,16 +405,16 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	LoadSystemClass(_actionClasses, "Action`15");
 	LoadSystemClass(_actionClasses, "Action`16");
 
-	_functionReferenceQueue = mono_gc_reference_queue_new(FunctionRefQueueCallback);
+	_functionReferenceQueue = std::deleted_unique_ptr<MonoReferenceQueue>(mono_gc_reference_queue_new(FunctionRefQueueCallback), mono_gc_reference_queue_free);
 
 	// MonoAssemblyName is an incomplete type (internal to mono), so we can't allocate it ourselves.
 	// There isn't any api to allocate an empty one either, so we need to do it this way.
-	_assemblyName = mono_assembly_name_new("blank");
-	mono_assembly_name_free(_assemblyName); // "it does not frees the object itself, only the name members" (typo included)
+	_assemblyName = std::deleted_unique_ptr<MonoAssemblyName>(mono_assembly_name_new("blank"), mono_free);
+	mono_assembly_name_free(_assemblyName.get()); // "it does not frees the object itself, only the name members" (typo included)
 
 	DCCallVM* vm = dcNewCallVM(4096);
 	dcMode(vm, DC_CALL_C_DEFAULT);
-	_callVirtMachine = std::unique_ptr<DCCallVM, VMDeleter>(vm);
+	_callVirtMachine = std::deleted_unique_ptr<DCCallVM>(vm, dcFree);
 
 	_provider->Log(LOG_PREFIX "Inited!", Severity::Debug);
 
@@ -419,16 +422,8 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 }
 
 void CSharpLanguageModule::Shutdown() {
-	if (_functionReferenceQueue) {
-		mono_gc_reference_queue_free(_functionReferenceQueue);
-		_functionReferenceQueue = nullptr;
-	}
-
-	if (_assemblyName) {
-		mono_free(_assemblyName);
-		_assemblyName = nullptr;
-	}
-
+	_functionReferenceQueue.reset();
+	_assemblyName.reset();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
 	_actionClasses.clear();
@@ -494,12 +489,14 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optiona
 
 	mono_config_parse(configPath.has_value() ? configPath->string().c_str() : nullptr);
 
-	_rootDomain = mono_jit_init("PlugifyJITRuntime");
-	if (!_rootDomain)
+	MonoDomain* rootDomain = mono_jit_init("PlugifyJITRuntime");
+	if (!rootDomain)
 		return false;
 
+	_rootDomain = std::deleted_unique_ptr<MonoDomain>(rootDomain, mono_jit_cleanup);
+
 	if (_settings.enableDebugging) {
-		mono_debug_domain_create(_rootDomain);
+		mono_debug_domain_create(_rootDomain.get());
 	}
 
 	mono_thread_set_main(mono_thread_current());
@@ -517,18 +514,10 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optiona
 void CSharpLanguageModule::ShutdownMono() {
 	mono_domain_set(mono_get_root_domain(), false);
 
-	if (_appDomain) {
-		mono_domain_unload(_appDomain);
-		_appDomain = nullptr;
-	}
+	_appDomain.reset();
+	_rootDomain.reset();
 
-	if (_rootDomain) {
-		mono_jit_cleanup(_rootDomain);
-		_rootDomain = nullptr;
-	}
-
-	_core.assembly = nullptr;
-	_core.image = nullptr;
+	_core = AssemblyInfo{};
 }
 
 template<typename T>
@@ -554,7 +543,7 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& ar
 		MonoError error;
 		char* cStr = mono_string_to_utf8_checked(source, &error);
 		if (!mono_error_ok(&error)) {
-			g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: [{}] '{}'.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
+			g_monolm.GetProvider()->Log(std::format(LOG_PREFIX "Failed to convert MonoString* to UTF-8: ({}) {}.", mono_error_get_error_code(&error), mono_error_get_message(&error)), Severity::Debug);
 			mono_error_cleanup(&error);
 			return {};
 		}
@@ -602,7 +591,7 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 	} else {
 		auto* function = new plugify::Function(_rt);
 		methodAddr = function->GetJitFunc(method, &DelegateCall, source);
-		mono_gc_reference_queue_add(_functionReferenceQueue, reinterpret_cast<MonoObject*>(source), reinterpret_cast<void*>(function));
+		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(source), reinterpret_cast<void*>(function));
 	}
 
 	_cachedDelegates.emplace(ref, methodAddr);
@@ -2099,7 +2088,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 	MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, _settings.enableDebugging, status);
 	if (!assembly)
-		return ErrorData{ std::format("Failed to load assembly: '{}'", mono_image_strerror(status)) };
+		return ErrorData{ std::format("Failed to load assembly: {}", mono_image_strerror(status)) };
 
 	MonoImage* image = mono_assembly_get_image(assembly);
 	if (!image)
@@ -2117,15 +2106,15 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 	methods.reserve(exportedMethods.size());
 
 	for (const auto& method : exportedMethods) {
-		auto seperated = Utils::Split(method.funcName, ".");
-		if (seperated.size() != 3) {
+		auto separated = Utils::Split(method.funcName, ".");
+		if (separated.size() != 3) {
 			methodErrors.emplace_back(std::format("Invalid function name: '{}'. Please provide name in that format: 'Namespace.Class.Method'", method.funcName));
 			continue;
 		}
 
-		std::string nameSpace(seperated[0]);
-		std::string className(seperated[1]);
-		std::string methodName(seperated[2]);
+		std::string nameSpace(separated[0]);
+		std::string className(separated[1]);
+		std::string methodName(separated[2]);
 
 		MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
 		if (!monoClass) {
@@ -2135,7 +2124,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), -1);
 		if (!monoMethod) {
-			methodErrors.emplace_back(std::format("Failed to find method '{}.{}::{}'", nameSpace, className, methodName));
+			methodErrors.emplace_back(std::format("Failed to find method '{}.{}.{}'", nameSpace, className, methodName));
 			continue;
 		}
 
@@ -2143,7 +2132,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
 		if (!(methodFlags & MONO_METHOD_ATTR_STATIC) && !monoInstance) {
-			methodErrors.emplace_back(std::format("Method '{}.{}::{}' is not static", nameSpace, className, methodName));
+			methodErrors.emplace_back(std::format("Method '{}.{}.{}' is not static", nameSpace, className, methodName));
 			continue;
 		}
 
@@ -2167,7 +2156,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		}
 
 		if (retType == ValueType::Invalid) {
-			methodErrors.emplace_back(std::format("Return of method '{}.{}::{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
+			methodErrors.emplace_back(std::format("Return of method '{}.{}.{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
 			continue;
 		}
 
@@ -2176,9 +2165,9 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		if (methodReturnType == ValueType::Char8 && retType == ValueType::Char16) {
 			retType = ValueType::Char8;
 		}
-		
+
 		if (retType != methodReturnType) {
-			methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(methodReturnType), ValueTypeToString(retType)));
+			methodErrors.emplace_back(std::format("Method '{}.{}.{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(methodReturnType), ValueTypeToString(retType)));
 			continue;
 		}
 
@@ -2199,7 +2188,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 			if (paramType == ValueType::Invalid) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}::{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
+				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}.{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
 				continue;
 			}
 
@@ -2211,7 +2200,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 			if (paramType != methodParamType) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Method '{}.{}::{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(methodParamType), i, ValueTypeToString(paramType)));
+				methodErrors.emplace_back(std::format("Method '{}.{}.{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(methodParamType), i, ValueTypeToString(paramType)));
 				continue;
 			}
 
@@ -2347,14 +2336,14 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 		auto* function = new plugify::Function(_rt);
 		void* methodAddr = function->GetJitFunc(method, &ExternalCall, func);
 		MonoDelegate* delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
-		mono_gc_reference_queue_add(_functionReferenceQueue, reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
+		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
 		return delegate;
 	}
 }
 
 template<typename T>
 MonoString* CSharpLanguageModule::CreateString(const T& source) const {
-	return source.empty() ? mono_string_empty(_appDomain) : mono_string_new(_appDomain, source.data());
+	return source.empty() ? mono_string_empty(_appDomain.get()) : mono_string_new(_appDomain.get(), source.data());
 }
 
 template<typename T>
@@ -2371,7 +2360,7 @@ MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, Mono
 }
 
 MonoArray* CSharpLanguageModule::CreateArray(MonoClass* klass, size_t count) const {
-	return mono_array_new(_appDomain, klass, count);
+	return mono_array_new(_appDomain.get(), klass, count);
 }
 
 template<typename T>
@@ -2384,7 +2373,7 @@ MonoArray* CSharpLanguageModule::CreateStringArray(const std::vector<T>& source)
 }
 
 MonoObject* CSharpLanguageModule::InstantiateClass(MonoClass* klass) const {
-	MonoObject* instance = mono_object_new(_appDomain, klass);
+	MonoObject* instance = mono_object_new(_appDomain.get(), klass);
 	mono_runtime_object_init(instance);
 	return instance;
 }
