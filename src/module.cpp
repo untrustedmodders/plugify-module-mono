@@ -2140,7 +2140,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		uint32_t paramCount = mono_signature_get_param_count(sig);
 		if (paramCount != method.paramTypes.size()) {
-			methodErrors.emplace_back(std::format("Invalid parameter count {} when it should have {}", method.paramTypes.size(), paramCount));
+			methodErrors.emplace_back(std::format("Method '{}' has invalid parameter count {} when it should have {}", method.funcName, method.paramTypes.size(), paramCount));
 			continue;
 		}
 
@@ -2156,7 +2156,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		}
 
 		if (retType == ValueType::Invalid) {
-			methodErrors.emplace_back(std::format("Return of method '{}.{}.{}' not supported '{}'", nameSpace, className, methodName, returnTypeName));
+			methodErrors.emplace_back(std::format("Return of method '{}' not supported '{}'", method.funcName, returnTypeName));
 			continue;
 		}
 
@@ -2167,7 +2167,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		}
 
 		if (retType != methodReturnType) {
-			methodErrors.emplace_back(std::format("Method '{}.{}.{}' has invalid return type '{}' when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(methodReturnType), ValueTypeToString(retType)));
+			methodErrors.emplace_back(std::format("Method '{}' has invalid return type '{}' when it should have '{}'", method.funcName, ValueTypeToString(methodReturnType), ValueTypeToString(retType)));
 			continue;
 		}
 
@@ -2188,19 +2188,19 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 			if (paramType == ValueType::Invalid) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}.{}.{}' not supported '{}'", i, nameSpace, className, methodName, paramTypeName));
+				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}' not supported '{}'", i, method.funcName, paramTypeName));
 				continue;
 			}
 
 			ValueType methodParamType = method.paramTypes[i].type;
-			
+
 			if (methodParamType == ValueType::Char8 && paramType == ValueType::Char16) {
 				paramType = ValueType::Char8;
 			}
 
 			if (paramType != methodParamType) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Method '{}.{}.{}' has invalid param type '{}' at index {} when it should have '{}'", nameSpace, className, methodName, ValueTypeToString(methodParamType), i, ValueTypeToString(paramType)));
+				methodErrors.emplace_back(std::format("Method '{}' has invalid param type '{}' at index {} when it should have '{}'", method.funcName, ValueTypeToString(methodParamType), i, ValueTypeToString(paramType)));
 				continue;
 			}
 
