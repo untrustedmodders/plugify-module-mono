@@ -405,6 +405,8 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	LoadSystemClass(_actionClasses, "Action`15");
 	LoadSystemClass(_actionClasses, "Action`16");
 
+	_provider->Log("Loaded dependency assemblies and classes", Severity::Debug);
+
 	_functionReferenceQueue = std::deleted_unique_ptr<MonoReferenceQueue>(mono_gc_reference_queue_new(FunctionRefQueueCallback), mono_gc_reference_queue_free);
 
 	// MonoAssemblyName is an incomplete type (internal to mono), so we can't allocate it ourselves.
@@ -422,6 +424,8 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 }
 
 void CSharpLanguageModule::Shutdown() {
+	_provider->Log(LOG_PREFIX "Shutting down Mono runtime", Severity::Debug);
+
 	_functionReferenceQueue.reset();
 	_assemblyName.reset();
 	_cachedDelegates.clear();
@@ -434,9 +438,9 @@ void CSharpLanguageModule::Shutdown() {
 	_scripts.clear();
 	_callVirtMachine.reset();
 	_rt.reset();
-	_provider.reset();
 
 	ShutdownMono();
+	_provider.reset();
 }
 
 /*MonoAssembly* CSharpLanguageModule::OnMonoAssemblyPreloadHook(MonoAssemblyName* aname, char** assemblies_path, void* user_data) {
@@ -444,6 +448,8 @@ void CSharpLanguageModule::Shutdown() {
 }*/
 
 bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath) {
+	_provider->Log(std::format("Loading mono from: {}", monoPath.string()), Severity::Debug);
+
 	mono_trace_set_print_handler(OnPrintCallback);
 	mono_trace_set_printerr_handler(OnPrintErrorCallback);
 	mono_trace_set_log_handler(OnLogCallback, nullptr);
@@ -518,6 +524,8 @@ void CSharpLanguageModule::ShutdownMono() {
 	_rootDomain.reset();
 
 	_core = AssemblyInfo{};
+
+	_provider->Log(LOG_PREFIX "Shut down Mono runtime", Severity::Debug);
 }
 
 template<typename T>
@@ -559,6 +567,10 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& ar
 void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) {
 	if (source == nullptr) {
 		_provider->Log(LOG_PREFIX "Delegate is null", Severity::Warning);
+
+		std::stringstream stream;
+		cpptrace::generate_trace().print(stream);
+		_provider->Log(stream.str(), Severity::Debug);
 		return nullptr;
 	}
 
@@ -624,18 +636,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	// Store parameters
 
 	switch (method->retType.type) {
-		/*case ValueType::Vector2:
-			dcArgPointer(vm, AllocateMemory<plugify::Vector2>(args));
-			break;
-		case ValueType::Vector3:
-			dcArgPointer(vm, AllocateMemory<plugify::Vector3>(args));
-			break;
-		case ValueType::Vector4:
-			dcArgPointer(vm, AllocateMemory<plugify::Vector4>(args));
-			break;
-		case ValueType::Matrix4x4:
-			dcArgPointer(vm, AllocateMemory<plugify::Matrix4x4>(args));
-			break;*/
 		// MonoString*
 		case ValueType::String:
 			dcArgPointer(vm, AllocateMemory<std::string>(args));
