@@ -126,7 +126,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         MONOLM_PLATFORM_LINUX=$<BOOL:${LINUX}>
 )
 
-set(MONOLM_VERSION "${CMAKE_PROJECT_VERSION}" CACHE STRING "Set version name")
+set(MONOLM_VERSION "0" CACHE STRING "Set version name")
 set(MONOLM_PACKAGE "${PROJECT_NAME}" CACHE STRING "Set package name")
 
 configure_file(
