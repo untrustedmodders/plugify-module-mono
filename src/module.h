@@ -34,10 +34,10 @@ namespace monolm {
 	class ScriptInstance {
 	public:
 		ScriptInstance(const plugify::IPlugin& plugin, MonoImage* image, MonoClass* klass);
-		~ScriptInstance();
+		ScriptInstance(ScriptInstance&& other) = default;
+		~ScriptInstance() = default;
 
-		operator bool() const { return _instance != nullptr; }
-		operator MonoObject*() const { return _instance; }
+		const plugify::IPlugin& GetPlugin() const { return _plugin; }
 		MonoObject* GetManagedObject() const { return _instance; }
 
 	private:
@@ -45,12 +45,10 @@ namespace monolm {
 		void InvokeOnEnd() const;
 
 	private:
+		const plugify::IPlugin& _plugin;
 		MonoImage* _image{ nullptr };
 		MonoClass* _klass{ nullptr };
 		MonoObject* _instance{ nullptr };
-
-		MonoMethod* _onStartMethod{ nullptr };
-		MonoMethod* _onEndMethod{ nullptr };
 
 		friend class CSharpLanguageModule;
 	};
@@ -60,11 +58,6 @@ namespace monolm {
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
 
 	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
-	using ScriptOpt = std::optional<std::reference_wrapper<ScriptInstance>>;
-	using PluginRef = std::reference_wrapper<const plugify::IPlugin>;
-	using MethodRef = std::reference_wrapper<const plugify::Method>;
-	//using AttributeMap = std::vector<std::pair<const char*, MonoObject*>>;
-	//using AssemblyMap = std::unordered_map<std::string, MonoAssembly*>;
 	using ArgumentList = std::vector<void*>;
 
 	/*struct ImportMethod {
@@ -101,7 +94,7 @@ namespace monolm {
 		void OnMethodExport(const plugify::IPlugin& plugin) override;
 
 		const ScriptMap& GetScripts() const { return _scripts; }
-		ScriptOpt FindScript(const std::string& name);
+		ScriptInstance* FindScript(const std::string& name);
 
 		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
 
@@ -119,7 +112,7 @@ namespace monolm {
 		bool InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath);
 		void ShutdownMono();
 
-		ScriptOpt CreateScriptInstance(const plugify::IPlugin& plugin, MonoImage* image);
+		ScriptInstance* CreateScriptInstance(const plugify::IPlugin& plugin, MonoImage* image);
 
 	private:
 		static void HandleException(MonoObject* exc, void* userData);
@@ -134,15 +127,15 @@ namespace monolm {
 		static void DeleteParam(const std::vector<void*>& args, uint8_t& i, plugify::ValueType type);
 		static void DeleteReturn(const std::vector<void*>& args, uint8_t& i, plugify::ValueType type);
 		static void SetReturn(const plugify::Method* method, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
-		static void SetParams(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, std::vector<void*>& args);
-		static void SetReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const std::vector<void*>& args);
-		static void PullReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const std::vector<void*>& args);
+		static void SetParams(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
+		static void SetReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
+		static void PullReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
 
 		template<typename T>
-		static void* MonoStructToArg(std::vector<void*>& args);
+		static void* MonoStructToArg(ArgumentList& args);
 		template<typename T>
-		static void* MonoArrayToArg(MonoArray* source, std::vector<void*>& args);
-		static void* MonoStringToArg(MonoString* source, std::vector<void*>& args);
+		static void* MonoArrayToArg(MonoArray* source, ArgumentList& args);
+		static void* MonoStringToArg(MonoString* source, ArgumentList& args);
 		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method);
 
 		void CleanupDelegateCache();
