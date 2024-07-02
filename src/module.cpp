@@ -48,6 +48,25 @@ struct _MonoDelegate {
 using namespace monolm;
 using namespace plugify;
 
+template<class T>
+inline constexpr bool always_false_v = std::is_same_v<std::decay_t<T>, std::add_cv_t<std::decay_t<T>>>;
+
+void std::default_delete<DCCallVM>::operator()(DCCallVM* vm) const noexcept {
+	dcFree(vm);
+}
+
+void std::default_delete<MonoReferenceQueue>::operator()(MonoReferenceQueue* queue) const noexcept {
+	mono_gc_reference_queue_free(queue);
+}
+
+void monolm::RootDomainDeleter::operator()(MonoDomain* domain) const noexcept {
+	mono_jit_cleanup(domain);
+}
+
+void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const noexcept {
+	mono_domain_unload(domain);
+}
+
 bool IsMethodPrimitive(const plugify::Method& method) {
 	// char8 is exception among primitive types
 
@@ -298,6 +317,48 @@ void FreeMemory(void* ptr) {
 	free(ptr);
 }
 
+template<typename T>
+DCaggr* CreateDcAggr() {
+	static_assert(always_false_v<T>, "CreateDcAggr specialization required");
+	return nullptr;
+}
+
+template<>
+DCaggr* CreateDcAggr<Vector2>() {
+	DCaggr* ag = dcNewAggr(2, sizeof(Vector2));
+	for (size_t i = 0; i < 2; ++i)
+		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+	dcCloseAggr(ag);
+	return ag;
+}
+
+template<>
+DCaggr* CreateDcAggr<Vector3>() {
+	DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
+	for (size_t i = 0; i < 3; ++i)
+		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+	dcCloseAggr(ag);
+	return ag;
+}
+
+template<>
+DCaggr* CreateDcAggr<Vector4>() {
+	DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
+	for (size_t i = 0; i < 4; ++i)
+		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+	dcCloseAggr(ag);
+	return ag;
+}
+
+template<>
+DCaggr* CreateDcAggr<Matrix4x4>() {
+	DCaggr* ag = dcNewAggr(16, sizeof(Matrix4x4));
+	for (size_t i = 0; i < 16; ++i)
+		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+	dcCloseAggr(ag);
+	return ag;
+}
+
 void FunctionRefQueueCallback(void* function) {
 	delete reinterpret_cast<Function*>(function);
 }
@@ -335,7 +396,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		return ErrorData{ "Initialization of PlugifyMonoRuntime domain failed" };
 
 	mono_domain_set(appDomain, true);
-	_appDomain = std::deleted_unique_ptr<MonoDomain>(appDomain, mono_domain_unload);
+	_appDomain = std::unique_ptr<MonoDomain, AppDomainDeleter>(appDomain);
 
 	std::vector<std::string> assemblyErrors;
 
@@ -408,16 +469,11 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	_provider->Log("Loaded dependency assemblies and classes", Severity::Debug);
 
-	_functionReferenceQueue = std::deleted_unique_ptr<MonoReferenceQueue>(mono_gc_reference_queue_new(FunctionRefQueueCallback), mono_gc_reference_queue_free);
-
-	// MonoAssemblyName is an incomplete type (internal to mono), so we can't allocate it ourselves.
-	// There isn't any api to allocate an empty one either, so we need to do it this way.
-	_assemblyName = std::deleted_unique_ptr<MonoAssemblyName>(mono_assembly_name_new("blank"), mono_free);
-	mono_assembly_name_free(_assemblyName.get()); // "it does not frees the object itself, only the name members" (typo included)
+	_functionReferenceQueue = std::unique_ptr<MonoReferenceQueue>(mono_gc_reference_queue_new(FunctionRefQueueCallback));
 
 	DCCallVM* vm = dcNewCallVM(4096);
 	dcMode(vm, DC_CALL_C_DEFAULT);
-	_callVirtMachine = std::deleted_unique_ptr<DCCallVM>(vm, dcFree);
+	_callVirtMachine = std::unique_ptr<DCCallVM>(vm);
 
 	_provider->Log(LOG_PREFIX "Inited!", Severity::Debug);
 
@@ -428,7 +484,6 @@ void CSharpLanguageModule::Shutdown() {
 	_provider->Log(LOG_PREFIX "Shutting down Mono runtime", Severity::Debug);
 
 	_functionReferenceQueue.reset();
-	_assemblyName.reset();
 	_cachedFunctions.clear();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
@@ -501,7 +556,7 @@ bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optiona
 	if (!rootDomain)
 		return false;
 
-	_rootDomain = std::deleted_unique_ptr<MonoDomain>(rootDomain, mono_jit_cleanup);
+	_rootDomain = std::unique_ptr<MonoDomain, RootDomainDeleter>(rootDomain);
 
 	if (_settings.enableDebugging) {
 		mono_debug_domain_create(_rootDomain.get());
@@ -627,7 +682,13 @@ void CSharpLanguageModule::CleanupFunctionCache() {
 void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	// TODO: Does mutex here good choose ?
 	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
+
+	size_t argsCount = std::count_if(method->paramTypes.begin(), method->paramTypes.end(), [](const Property& param) {
+		return param.type > ValueType::LastPrimitive && param.type < ValueType::FirstPOD;
+	});
+
 	ArgumentList args;
+	args.reserve(argsCount);
 
 	DCCallVM* vm = g_monolm._callVirtMachine.get();
 	dcReset(vm);
@@ -691,34 +752,22 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			dcArgPointer(vm, AllocateMemory<std::vector<std::string>>(args));
 			break;
 		case ValueType::Vector2:
-			ag = dcNewAggr(2, sizeof(Vector2));
-			for (size_t i = 0; i < 2; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
+			ag = CreateDcAggr<Vector2>();
 			dcBeginCallAggr(vm, ag);
 			hasRet = false;
 			break;
 		case ValueType::Vector3:
-			ag = dcNewAggr(3, sizeof(Vector3));
-			for (size_t i = 0; i < 3; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
+			ag = CreateDcAggr<Vector3>();
 			dcBeginCallAggr(vm, ag);
 			hasRet = false;
 			break;
 		case ValueType::Vector4:
-			ag = dcNewAggr(4, sizeof(Vector4));
-			for (size_t i = 0; i < 4; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
+			ag = CreateDcAggr<Vector4>();
 			dcBeginCallAggr(vm, ag);
 			hasRet = false;
 			break;
 		case ValueType::Matrix4x4:
-			ag = dcNewAggr(16, sizeof(Matrix4x4));
-			for (size_t i = 0; i < 16; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
+			ag = CreateDcAggr<Matrix4x4>();
 			dcBeginCallAggr(vm, ag);
 			hasRet = false;
 			break;
@@ -841,7 +890,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgPointer(vm, MonoArrayToArg<std::string>(*p->GetArgument<MonoArray**>(i), args));
 					break;
 				default:
-					std::puts("Unsupported types!\n");
+					std::puts(LOG_PREFIX "Unsupported types!\n");
 					std::terminate();
 					break;
 			}
@@ -948,7 +997,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					dcArgPointer(vm, MonoArrayToArg<std::string>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				default:
-					std::puts("Unsupported types!\n");
+					std::puts(LOG_PREFIX "Unsupported types!\n");
 					std::terminate();
 					break;
 			}
@@ -1164,12 +1213,11 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		default:
-			std::puts("Unsupported types!\n");
+			std::puts(LOG_PREFIX "Unsupported types!\n");
 			std::terminate();
 			break;
 	}
 
-	size_t argsCount = args.size();
 	if (argsCount != 0) {
 		if (hasRefs) {
 			size_t j = hasRet; // skip first param if has return
@@ -1527,7 +1575,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					arg = new MonoArray*[1]{ g_monolm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i)) };
 					break;
 				default:
-					std::puts("Unsupported types!\n");
+					std::puts(LOG_PREFIX "Unsupported types!\n");
 					std::terminate();
 					break;
 			}
@@ -1616,7 +1664,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					arg = g_monolm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i));
 					break;
 				default:
-					std::puts("Unsupported types!\n");
+					std::puts(LOG_PREFIX "Unsupported types!\n");
 					std::terminate();
 					break;
 			}
@@ -2057,14 +2105,14 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 				break;
 			}
 			default:
-				std::puts("Unsupported types!\n");
+				std::puts(LOG_PREFIX "Unsupported types!\n");
 				std::terminate();
 				break;
 		}
 	} else {
 		switch (method->retType.type) {
 			case ValueType::Invalid:
-				std::puts("Unsupported types!\n");
+				std::puts(LOG_PREFIX "Unsupported types!\n");
 				std::terminate();
 				break;
 			case ValueType::Void:

@@ -30,6 +30,16 @@ namespace plugify {
 	struct ReturnValue;
 }
 
+template <>
+struct std::default_delete<DCCallVM> {
+	void operator()(DCCallVM* vm) const noexcept;
+};
+
+template <>
+struct std::default_delete<MonoReferenceQueue> {
+	void operator()(MonoReferenceQueue* queue) const noexcept;
+};
+
 namespace monolm {
 	class ScriptInstance {
 	public:
@@ -51,6 +61,14 @@ namespace monolm {
 		MonoObject* _instance{ nullptr };
 
 		friend class CSharpLanguageModule;
+	};
+
+	struct RootDomainDeleter {
+		void operator()(MonoDomain* domain) const noexcept;
+	};
+
+	struct AppDomainDeleter {
+		void operator()(MonoDomain* domain) const noexcept;
 	};
 
 	std::string MonoStringToUTF8(MonoString* string);
@@ -140,10 +158,9 @@ namespace monolm {
 		void CleanupFunctionCache();
 
 	private:
-		std::deleted_unique_ptr<MonoDomain> _rootDomain;
-		std::deleted_unique_ptr<MonoDomain> _appDomain;
-		std::deleted_unique_ptr<MonoReferenceQueue> _functionReferenceQueue;
-		std::deleted_unique_ptr<MonoAssemblyName> _assemblyName;
+		std::unique_ptr<MonoDomain, RootDomainDeleter> _rootDomain;
+		std::unique_ptr<MonoDomain, AppDomainDeleter> _appDomain;
+		std::unique_ptr<MonoReferenceQueue> _functionReferenceQueue;
 
 		AssemblyInfo _core;
 		ClassInfo _plugin;
@@ -164,7 +181,7 @@ namespace monolm {
 		std::map<uint32_t, void*> _cachedFunctions;
 		std::map<void*, uint32_t> _cachedDelegates;
 		
-		std::deleted_unique_ptr<DCCallVM> _callVirtMachine;
+		std::unique_ptr<DCCallVM> _callVirtMachine;
 		std::mutex _mutex;
 
 		std::vector<MonoClass*> _funcClasses;
