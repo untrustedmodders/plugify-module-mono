@@ -25,11 +25,6 @@ bool Core_IsPluginLoaded(MonoString* name, int version, bool minimum) {
 	return g_monolm.GetProvider()->IsPluginLoaded(MonoStringToUTF8(name), requiredVersion, minimum);
 }
 
-MonoObject* Plugin_FindPluginByName(MonoString* name) {
-	ScriptInstance* script = g_monolm.FindScript(MonoStringToUTF8(name));
-	return script ? script->GetManagedObject() : nullptr;
-}
-
 MonoString* Plugin_FindResource(MonoString* name, MonoString* path) {
 	ScriptInstance* script = g_monolm.FindScript(MonoStringToUTF8(name));
 	if (script) {
@@ -41,10 +36,15 @@ MonoString* Plugin_FindResource(MonoString* name, MonoString* path) {
 	return nullptr;
 }
 
+MonoObject* Plugin_FindPluginByName(MonoString* name) {
+	ScriptInstance* script = g_monolm.FindScript(MonoStringToUTF8(name));
+	return script ? script->GetManagedObject() : nullptr;
+}
+
 void Glue::RegisterFunctions() {
 	PLUG_ADD_INTERNAL_CALL(Core_GetBaseDirectory);
 	PLUG_ADD_INTERNAL_CALL(Core_IsModuleLoaded);
 	PLUG_ADD_INTERNAL_CALL(Core_IsPluginLoaded);
-	PLUG_ADD_INTERNAL_CALL(Plugin_FindPluginByName);
 	PLUG_ADD_INTERNAL_CALL(Plugin_FindResource);
+	PLUG_ADD_INTERNAL_CALL(Plugin_FindPluginByName);
 }

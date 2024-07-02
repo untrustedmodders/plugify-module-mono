@@ -615,7 +615,7 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 
 void CSharpLanguageModule::CleanupFunctionCache() {
 	for (auto it = _cachedFunctions.begin(); it != _cachedFunctions.end();) {
-		if (mono_gchandle_get_target(std::get<uint32_t>(*it)) == nullptr) {
+		if (mono_gchandle_get_target(it->first) == nullptr) {
 			it = _cachedFunctions.erase(it);
 		} else {
 			++it;
@@ -692,7 +692,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		case ValueType::Vector2:
 			ag = dcNewAggr(2, sizeof(Vector2));
-			for (int i = 0; i < 2; ++i)
+			for (size_t i = 0; i < 2; ++i)
 				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
 			dcCloseAggr(ag);
 			dcBeginCallAggr(vm, ag);
@@ -700,7 +700,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		case ValueType::Vector3:
 			ag = dcNewAggr(3, sizeof(Vector3));
-			for (int i = 0; i < 3; ++i)
+			for (size_t i = 0; i < 3; ++i)
 				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
 			dcCloseAggr(ag);
 			dcBeginCallAggr(vm, ag);
@@ -708,7 +708,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		case ValueType::Vector4:
 			ag = dcNewAggr(4, sizeof(Vector4));
-			for (int i = 0; i < 4; ++i)
+			for (size_t i = 0; i < 4; ++i)
 				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
 			dcCloseAggr(ag);
 			dcBeginCallAggr(vm, ag);
@@ -716,7 +716,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		case ValueType::Matrix4x4:
 			ag = dcNewAggr(16, sizeof(Matrix4x4));
-			for (int i = 0; i < 16; ++i)
+			for (size_t i = 0; i < 16; ++i)
 				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
 			dcCloseAggr(ag);
 			dcBeginCallAggr(vm, ag);
@@ -1169,96 +1169,91 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 	}
 
-	// Pull back references into provided arguments
+	size_t argsCount = args.size();
+	if (argsCount != 0) {
+		if (hasRefs) {
+			size_t j = hasRet; // skip first param if has return
 
-	PullReferences(method, p, count, hasRet, hasRefs, args);
-
-	if (!args.empty()) {
-		uint8_t j = 0;
+			if (j < argsCount) {
+				for (uint8_t i = 0; i < count; ++i) {
+					const auto& param = method->paramTypes[i];
+					if (param.ref) {
+						switch (param.type) {
+							case ValueType::String:
+								p->SetArgumentAt(i, g_monolm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
+								break;
+							case ValueType::ArrayBool:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[j++]), mono_get_byte_class()));
+								break;
+							case ValueType::ArrayChar8:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[j++]), mono_get_char_class()));
+								break;
+							case ValueType::ArrayChar16:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[j++]), mono_get_char_class()));
+								break;
+							case ValueType::ArrayInt8:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[j++]), mono_get_sbyte_class()));
+								break;
+							case ValueType::ArrayInt16:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[j++]), mono_get_int16_class()));
+								break;
+							case ValueType::ArrayInt32:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[j++]), mono_get_int32_class()));
+								break;
+							case ValueType::ArrayInt64:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[j++]), mono_get_int64_class()));
+								break;
+							case ValueType::ArrayUInt8:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[j++]), mono_get_byte_class()));
+								break;
+							case ValueType::ArrayUInt16:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[j++]), mono_get_uint16_class()));
+								break;
+							case ValueType::ArrayUInt32:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[j++]), mono_get_uint32_class()));
+								break;
+							case ValueType::ArrayUInt64:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[j++]), mono_get_uint64_class()));
+								break;
+							case ValueType::ArrayPointer:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[j++]), mono_get_intptr_class()));
+								break;
+							case ValueType::ArrayFloat:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[j++]), mono_get_single_class()));
+								break;
+							case ValueType::ArrayDouble:
+								p->SetArgumentAt(i, g_monolm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[j++]), mono_get_double_class()));
+								break;
+							case ValueType::ArrayString:
+								p->SetArgumentAt(i, g_monolm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[j++])));
+								break;
+							default:
+								break;
+						}
+					}
+					if (j == argsCount)
+						break;
+				}
+			}
+		}
+		
+		size_t j = 0;
 
 		if (hasRet) {
 			DeleteReturn(args, j, method->retType.type);
 		}
 
-		if (j < args.size()) {
+		if (j < argsCount) {
 			for (uint8_t i = 0; i < count; ++i) {
 				DeleteParam(args, j, method->paramTypes[i].type);
-				if (j == args.size())
+				if (j == argsCount)
 					break;
 			}
 		}
 	}
 }
 
-void CSharpLanguageModule::PullReferences(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
-	if (hasRefs) {
-		uint8_t j = hasRet; // skip first param if has return
-
-		if (j < args.size()) {
-			for (uint8_t i = 0; i < count; ++i) {
-				const auto& param = method->paramTypes[i];
-				if (param.ref) {
-					switch (param.type) {
-						case ValueType::String:
-							p->SetArgumentAt(i, g_monolm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
-							break;
-						case ValueType::ArrayBool:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[j++]), mono_get_byte_class()));
-							break;
-						case ValueType::ArrayChar8:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[j++]), mono_get_char_class()));
-							break;
-						case ValueType::ArrayChar16:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[j++]), mono_get_char_class()));
-							break;
-						case ValueType::ArrayInt8:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[j++]), mono_get_sbyte_class()));
-							break;
-						case ValueType::ArrayInt16:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[j++]), mono_get_int16_class()));
-							break;
-						case ValueType::ArrayInt32:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[j++]), mono_get_int32_class()));
-							break;
-						case ValueType::ArrayInt64:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[j++]), mono_get_int64_class()));
-							break;
-						case ValueType::ArrayUInt8:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[j++]), mono_get_byte_class()));
-							break;
-						case ValueType::ArrayUInt16:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[j++]), mono_get_uint16_class()));
-							break;
-						case ValueType::ArrayUInt32:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[j++]), mono_get_uint32_class()));
-							break;
-						case ValueType::ArrayUInt64:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[j++]), mono_get_uint64_class()));
-							break;
-						case ValueType::ArrayPointer:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[j++]), mono_get_intptr_class()));
-							break;
-						case ValueType::ArrayFloat:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[j++]), mono_get_single_class()));
-							break;
-						case ValueType::ArrayDouble:
-							p->SetArgumentAt(i, g_monolm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[j++]), mono_get_double_class()));
-							break;
-						case ValueType::ArrayString:
-							p->SetArgumentAt(i, g_monolm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[j++])));
-							break;
-						default:
-							break;
-					}
-				}
-				if (j == args.size())
-					break;
-			}
-		}
-	}
-}
-
-void CSharpLanguageModule::DeleteParam(const ArgumentList& args, uint8_t& i, ValueType type) {
+void CSharpLanguageModule::DeleteParam(const ArgumentList& args, size_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::String:
 			delete reinterpret_cast<std::string*>(args[i++]);
@@ -1313,7 +1308,7 @@ void CSharpLanguageModule::DeleteParam(const ArgumentList& args, uint8_t& i, Val
 	}
 }
 
-void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, uint8_t& i, ValueType type) {
+void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, size_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::String:
 			FreeMemory<std::string>(args[i++]);

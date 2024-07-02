@@ -124,12 +124,11 @@ namespace monolm {
 		static void InternalCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 		static void DelegateCall(const plugify::Method* method, void* data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
-		static void DeleteParam(const std::vector<void*>& args, uint8_t& i, plugify::ValueType type);
-		static void DeleteReturn(const std::vector<void*>& args, uint8_t& i, plugify::ValueType type);
+		static void DeleteParam(const ArgumentList& args, size_t& i, plugify::ValueType type);
+		static void DeleteReturn(const ArgumentList& args, size_t& i, plugify::ValueType type);
 		static void SetReturn(const plugify::Method* method, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
 		static void SetParams(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
 		static void SetReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
-		static void PullReferences(const plugify::Method* method, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
 
 		template<typename T>
 		static void* MonoStructToArg(ArgumentList& args);
