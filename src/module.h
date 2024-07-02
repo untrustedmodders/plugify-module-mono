@@ -138,7 +138,7 @@ namespace monolm {
 		static void* MonoStringToArg(MonoString* source, ArgumentList& args);
 		void* MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method);
 
-		void CleanupDelegateCache();
+		void CleanupFunctionCache();
 
 	private:
 		std::deleted_unique_ptr<MonoDomain> _rootDomain;
@@ -162,8 +162,10 @@ namespace monolm {
 		std::vector<std::unique_ptr<plugify::Method>> _methods;
 		std::unordered_map<void*, plugify::Function> _functions;
 
+		std::map<uint32_t, void*> _cachedFunctions;
+		std::map<void*, uint32_t> _cachedDelegates;
+		
 		std::deleted_unique_ptr<DCCallVM> _callVirtMachine;
-		std::map<uint32_t, void*> _cachedDelegates;
 		std::mutex _mutex;
 
 		std::vector<MonoClass*> _funcClasses;

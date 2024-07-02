@@ -25,6 +25,7 @@
 
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
 MONO_API void* mono_delegate_to_ftnptr(MonoDelegate* delegate);
+//MONO_API void mono_delegate_free_ftnptr(MonoDelegate* delegate);
 MONO_API const void* mono_lookup_internal_call_full(MonoMethod* method, int warn_on_missing, mono_bool* uses_handles, mono_bool* foreign);
 
 struct _MonoDelegate {
@@ -428,6 +429,7 @@ void CSharpLanguageModule::Shutdown() {
 
 	_functionReferenceQueue.reset();
 	_assemblyName.reset();
+	_cachedFunctions.clear();
 	_cachedDelegates.clear();
 	_funcClasses.clear();
 	_actionClasses.clear();
@@ -589,12 +591,12 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 
 	uint32_t ref = mono_gchandle_new_weakref(reinterpret_cast<MonoObject*>(source), 0);
 
-	auto it = _cachedDelegates.find(ref);
-	if (it != _cachedDelegates.end()) {
+	auto it = _cachedFunctions.find(ref);
+	if (it != _cachedFunctions.end()) {
 		return std::get<void*>(*it);
 	}
 
-	CleanupDelegateCache();
+	CleanupFunctionCache();
 
 	void* methodAddr;
 
@@ -606,15 +608,15 @@ void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugif
 		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(source), reinterpret_cast<void*>(function));
 	}
 
-	_cachedDelegates.emplace(ref, methodAddr);
+	_cachedFunctions.emplace(ref, methodAddr);
 
 	return methodAddr;
 }
 
-void CSharpLanguageModule::CleanupDelegateCache() {
-	for (auto it = _cachedDelegates.begin(); it != _cachedDelegates.end();) {
-		if (mono_gchandle_get_target(it->first) == nullptr) {
-			it = _cachedDelegates.erase(it);
+void CSharpLanguageModule::CleanupFunctionCache() {
+	for (auto it = _cachedFunctions.begin(); it != _cachedFunctions.end();) {
+		if (mono_gchandle_get_target(std::get<uint32_t>(*it)) == nullptr) {
+			it = _cachedFunctions.erase(it);
 		} else {
 			++it;
 		}
@@ -1313,18 +1315,6 @@ void CSharpLanguageModule::DeleteParam(const ArgumentList& args, uint8_t& i, Val
 
 void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, uint8_t& i, ValueType type) {
 	switch (type) {
-		/*case ValueType::Vector2:
-			FreeMemory<plugify::Vector2>(args[i++]);
-			break;
-		case ValueType::Vector3:
-			FreeMemory<plugify::Vector3>(args[i++]);
-			break;
-		case ValueType::Vector4:
-			FreeMemory<plugify::Vector4>(args[i++]);
-			break;
-		case ValueType::Matrix4x4:
-			FreeMemory<plugify::Matrix4x4>(args[i++]);
-			break;*/
 		case ValueType::String:
 			FreeMemory<std::string>(args[i++]);
 			break;
@@ -1894,14 +1884,14 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 			case ValueType::Vector3: {
 				auto* source = reinterpret_cast<Vector3*>(mono_object_unbox(result));
 				auto* dest = p->GetArgument<Vector3*>(0);
-				*dest = *source;
+				std::construct_at(dest, *source);
 				ret->SetReturnPtr(dest);
 				break;
 			}
 			case ValueType::Vector4: {
 				auto* source = reinterpret_cast<Vector4*>(mono_object_unbox(result));
 				auto* dest = p->GetArgument<Vector4*>(0);
-				*dest = *source;
+				std::construct_at(dest, *source);
 				ret->SetReturnPtr(dest);
 				break;
 			}
@@ -1920,7 +1910,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 			case ValueType::Matrix4x4: {
 				auto* source = reinterpret_cast<Matrix4x4*>(mono_object_unbox(result));
 				auto* dest = p->GetArgument<Matrix4x4*>(0);
-				*dest = *source;
+				std::construct_at(dest, *source);
 				ret->SetReturnPtr(dest);
 				break;
 			}
@@ -2325,6 +2315,14 @@ ScriptInstance* CSharpLanguageModule::FindScript(const std::string& name) {
 }
 
 MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Method& method) {
+	auto it = _cachedDelegates.find(func);
+	if (it != _cachedDelegates.end()) {
+		MonoObject* object = mono_gchandle_get_target(std::get<uint32_t>(*it));
+		if (object != nullptr) {
+			return reinterpret_cast<MonoDelegate*>(object);
+		}
+	}
+	
 	const auto& delegateClasses = method.retType.type != ValueType::Void ? _funcClasses : _actionClasses;
 
 	size_t paramCount = method.paramTypes.size();
@@ -2334,16 +2332,26 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 	}
 
 	MonoClass* delegateClass = delegateClasses[paramCount];
-
+	MonoDelegate* delegate;
+	
 	if (IsMethodPrimitive(method)) {
-		return mono_ftnptr_to_delegate(delegateClass, func);
+		delegate = mono_ftnptr_to_delegate(delegateClass, func);
 	} else {
 		auto* function = new plugify::Function(_rt);
 		void* methodAddr = function->GetJitFunc(method, &ExternalCall, func);
-		MonoDelegate* delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
+		delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
 		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
-		return delegate;
 	}
+	
+	uint32_t ref = mono_gchandle_new_weakref(reinterpret_cast<MonoObject*>(delegate), 0);
+	
+	if (it != _cachedDelegates.end()) {
+		std::get<uint32_t>(*it) = ref;
+	} else {
+		_cachedDelegates.emplace(func, ref);
+	}
+	
+	return delegate;
 }
 
 template<typename T>
