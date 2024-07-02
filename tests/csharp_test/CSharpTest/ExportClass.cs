@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 using Plugify;
 
 namespace CSharpTest
@@ -235,12 +236,12 @@ namespace CSharpTest
 
         public static void Param4(int a, float b, double c, Vector4 d)
         {
-            Console.WriteLine($"Param4: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}]");
+            Console.WriteLine($"Param4: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}]");
         }
 
         public static void Param5(int a, float b, double c, Vector4 d, long[] e)
         {
-            Console.Write($"Param5: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}], e.size() = {e.Length}, e = [");
+            Console.Write($"Param5: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}], e.size() = {e.Length}, e = [");
             foreach (var elem in e)
             {
                 Console.Write($"{elem}, ");
@@ -250,7 +251,7 @@ namespace CSharpTest
 
         public static void Param6(int a, float b, double c, Vector4 d, long[] e, char f)
         {
-            Console.Write($"Param6: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}], e.size() = {e.Length}, e = [");
+            Console.Write($"Param6: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}], e.size() = {e.Length}, e = [");
             foreach (var elem in e)
             {
                 Console.Write($"{elem}, ");
@@ -260,7 +261,7 @@ namespace CSharpTest
 
         public static void Param7(int a, float b, double c, Vector4 d, long[] e, char f, string g)
         {
-            Console.Write($"Param7: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}], e.size() = {e.Length}, e = [");
+            Console.Write($"Param7: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}], e.size() = {e.Length}, e = [");
             foreach (var elem in e)
             {
                 Console.Write($"{elem}, ");
@@ -270,7 +271,7 @@ namespace CSharpTest
 
         public static void Param8(int a, float b, double c, Vector4 d, long[] e, char f, string g, float h)
         {
-            Console.Write($"Param8: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}], e.size() = {e.Length}, e = [");
+            Console.Write($"Param8: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}], e.size() = {e.Length}, e = [");
             foreach (var elem in e)
             {
                 Console.Write($"{elem}, ");
@@ -280,7 +281,7 @@ namespace CSharpTest
 
         public static void Param9(int a, float b, double c, Vector4 d, long[] e, char f, string g, float h, short k)
         {
-            Console.Write($"Param9: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}], e.size() = {e.Length}, e = [");
+            Console.Write($"Param9: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}], e.size() = {e.Length}, e = [");
             foreach (var elem in e)
             {
                 Console.Write($"{elem}, ");
@@ -290,7 +291,7 @@ namespace CSharpTest
 
         public static void Param10(int a, float b, double c, Vector4 d, long[] e, char f, string g, float h, short k, IntPtr l)
         {
-            Console.Write($"Param10: a = {a}, b = {b}, c = {c}, d = [{d.x},{d.y},{d.z},{d.w}], e.size() = {e.Length}, e = [");
+            Console.Write($"Param10: a = {a}, b = {b}, c = {c}, d = [{d.X},{d.Y},{d.Z},{d.W}], e.size() = {e.Length}, e = [");
             foreach (var elem in e)
             {
                 Console.Write($"{elem}, ");

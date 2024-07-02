@@ -266,6 +266,7 @@ def main(manifest_path, output_dir, override):
     link = 'https://github.com/untrustedmodders/csharp-lang-module/blob/main/generator/generator.py'
 
     content += 'using System;\n'
+    content += 'using System.Numerics;\n'
     content += 'using System.Runtime.CompilerServices;\n'
     content += 'using System.Runtime.InteropServices;\n'
     content += '\n'

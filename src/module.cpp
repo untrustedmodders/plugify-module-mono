@@ -196,15 +196,15 @@ ValueType MonoTypeToValueType(const char* typeName) {
 			{ "System.Action`15", ValueType::Function },
 			{ "System.Action`16", ValueType::Function },
 
-			{ "Plugify.Vector2", ValueType::Vector2 },
-			{ "Plugify.Vector3", ValueType::Vector3 },
-			{ "Plugify.Vector4", ValueType::Vector4 },
-			{ "Plugify.Matrix4x4", ValueType::Matrix4x4 },
+			{ "System.Numerics.Vector2", ValueType::Vector2 },
+			{ "System.Numerics.Vector3", ValueType::Vector3 },
+			{ "System.Numerics.Vector4", ValueType::Vector4 },
+			{ "System.Numerics.Matrix4x4", ValueType::Matrix4x4 },
 
-			{ "Plugify.Vector2&", ValueType::Vector2 },
-			{ "Plugify.Vector3&", ValueType::Vector3 },
-			{ "Plugify.Vector4&", ValueType::Vector4 },
-			{ "Plugify.Matrix4x4&", ValueType::Matrix4x4 },
+			{ "System.Numerics.Vector2&", ValueType::Vector2 },
+			{ "System.Numerics.Vector3&", ValueType::Vector3 },
+			{ "System.Numerics.Vector4&", ValueType::Vector4 },
+			{ "System.Numerics.Matrix4x4&", ValueType::Matrix4x4 },
 	};
 	auto it = valueTypeMap.find(typeName);
 	if (it != valueTypeMap.end())
@@ -633,6 +633,8 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	bool hasRet = true;
 	bool hasRefs = false;
 
+	DCaggr* ag = nullptr;
+
 	// Store parameters
 
 	switch (method->retType.type) {
@@ -685,6 +687,38 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		case ValueType::ArrayString:
 			dcArgPointer(vm, AllocateMemory<std::vector<std::string>>(args));
+			break;
+		case ValueType::Vector2:
+			ag = dcNewAggr(2, sizeof(Vector2));
+			for (int i = 0; i < 2; ++i)
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
+			dcBeginCallAggr(vm, ag);
+			hasRet = false;
+			break;
+		case ValueType::Vector3:
+			ag = dcNewAggr(3, sizeof(Vector3));
+			for (int i = 0; i < 3; ++i)
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
+			dcBeginCallAggr(vm, ag);
+			hasRet = false;
+			break;
+		case ValueType::Vector4:
+			ag = dcNewAggr(4, sizeof(Vector4));
+			for (int i = 0; i < 4; ++i)
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
+			dcBeginCallAggr(vm, ag);
+			hasRet = false;
+			break;
+		case ValueType::Matrix4x4:
+			ag = dcNewAggr(16, sizeof(Matrix4x4));
+			for (int i = 0; i < 16; ++i)
+				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+			dcCloseAggr(ag);
+			dcBeginCallAggr(vm, ag);
+			hasRet = false;
 			break;
 		default:
 			// Should not require storage
@@ -1003,10 +1037,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		case ValueType::Vector2: {
-			DCaggr* ag = dcNewAggr(2, sizeof(Vector2));
-			for (int i = 0; i < 2; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
 			Vector2 source;
 			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(source);
@@ -1015,10 +1045,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		}
 #if MONOLM_PLATFORM_WINDOWS
 		case ValueType::Vector3: {
-			DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
-			for (int i = 0; i < 3; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
 			auto* dest = p->GetArgument<Vector3*>(0);
 			dcCallAggr(vm, addr, ag, dest);
 			ret->SetReturnPtr(dest);
@@ -1026,10 +1052,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		case ValueType::Vector4: {
-			DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
-			for (int i = 0; i < 4; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
 			auto* dest = p->GetArgument<Vector4*>(0);
 			dcCallAggr(vm, addr, ag, dest);
 			ret->SetReturnPtr(dest);
@@ -1038,10 +1060,6 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		}
 #else
 		case ValueType::Vector3: {
-			DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
-			for (int i = 0; i < 3; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
 			Vector3 source;
 			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(source);
@@ -1049,21 +1067,14 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 			break;
 		}
 		case ValueType::Vector4: {
-			DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
-			for (int i = 0; i < 4; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
 			Vector4 source;
 			dcCallAggr(vm, addr, ag, &source);
 			ret->SetReturnPtr(source);
 			dcFreeAggr(ag);
+			break;
 		}
 #endif
 		case ValueType::Matrix4x4: {
-			DCaggr* ag = dcNewAggr(16, sizeof(Matrix4x4));
-			for (int i = 0; i < 16; ++i)
-				dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-			dcCloseAggr(ag);
 			auto* dest = p->GetArgument<Matrix4x4*>(0);
 			dcCallAggr(vm, addr, ag, dest);
 			ret->SetReturnPtr(dest);
@@ -1375,7 +1386,8 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 	bool hasRefs = false;
 	bool hasRet = ValueTypeIsHiddenObjectParam(method->retType.type);
 
-	ArgumentList args(hasRet ? count - 1 : count);
+	ArgumentList args;
+	args.reserve(hasRet ? count - 1 : count);
 
 	SetParams(method, p, count, hasRet, hasRefs, args);
 
@@ -2273,7 +2285,7 @@ void CSharpLanguageModule::OnPluginStart(const IPlugin& plugin) {
 
 void CSharpLanguageModule::OnPluginEnd(const IPlugin& plugin) {
 	ScriptInstance* script = FindScript(plugin.GetName());
-	if (script != nullptr) {
+	if (script) {
 		script->InvokeOnEnd();
 	}
 }
