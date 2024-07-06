@@ -4,6 +4,8 @@
 #include <dyncall/dyncall.h>
 #include <module_export.h>
 #include <plugify/function.h>
+#include <plugify/plugin.h>
+#include <plugify/module.h>
 #include <plugify/language_module.h>
 
 extern "C" {
@@ -20,14 +22,6 @@ extern "C" {
 	typedef struct _MonoString MonoString;
 	typedef struct _MonoDomain MonoDomain;
 	typedef int32_t mono_bool;
-}
-
-namespace plugify {
-	class IModule;
-	class IPlugin;
-	struct Method;
-	struct Parameters;
-	struct ReturnValue;
 }
 
 template <>
@@ -75,7 +69,7 @@ namespace monolm {
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
 
-	using ScriptMap = std::unordered_map<std::string, ScriptInstance>;
+	using ScriptMap = std::map<plugify::UniqueId, ScriptInstance>;
 	using ArgumentList = std::vector<void*>;
 
 	/*struct ImportMethod {
@@ -112,7 +106,7 @@ namespace monolm {
 		void OnMethodExport(const plugify::IPlugin& plugin) override;
 
 		const ScriptMap& GetScripts() const { return _scripts; }
-		ScriptInstance* FindScript(const std::string& name);
+		ScriptInstance* FindScript(plugify::UniqueId id);
 
 		const std::shared_ptr<plugify::IPlugifyProvider>& GetProvider() { return _provider; }
 
@@ -164,14 +158,10 @@ namespace monolm {
 
 		AssemblyInfo _core;
 		ClassInfo _plugin;
-		//ClassInfo _vector2;
-		//ClassInfo _vector3;
-		//ClassInfo _vector4;
-		//ClassInfo _matrix4x4;
 
-		std::shared_ptr<asmjit::JitRuntime> _rt;
 		std::shared_ptr<plugify::IPlugifyProvider> _provider;
-		
+		std::shared_ptr<asmjit::JitRuntime> _rt;
+
 		std::set<std::string/*, ImportMethod*/> _importMethods;
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
 		

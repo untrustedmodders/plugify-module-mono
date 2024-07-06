@@ -43,14 +43,9 @@ namespace Plugify
 			Dependencies = dependencies;
 		}
 
-		public static Plugin FindPluginByName(string name)
-		{
-			return (Plugin) InternalCalls.Plugin_FindPluginByName(name);
-		}
-
 		public string FindResource(string path)
 		{
-			return InternalCalls.Plugin_FindResource(Name, path);
+			return InternalCalls.Plugin_FindResource(Id, path);
 		}
 
 		public static bool operator ==(Plugin lhs, Plugin rhs)

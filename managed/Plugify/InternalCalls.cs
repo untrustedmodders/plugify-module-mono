@@ -15,9 +15,7 @@ namespace Plugify
 
 		#region Plugin
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
-		internal static extern object Plugin_FindPluginByName(string name);
-		[MethodImplAttribute(MethodImplOptions.InternalCall)]
-		internal static extern string Plugin_FindResource(string name, string path);
+		internal static extern string Plugin_FindResource(long id, string path);
 		#endregion
 	}
 }

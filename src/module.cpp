@@ -13,8 +13,6 @@
 #include <mono/metadata/threads.h>
 #include <mono/metadata/exception.h>
 
-#include <plugify/module.h>
-#include <plugify/plugin.h>
 #include <plugify/log.h>
 #include <plugify/math.h>
 #include <plugify/plugin_descriptor.h>
@@ -70,11 +68,11 @@ void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const noexcept {
 bool IsMethodPrimitive(const plugify::Method& method) {
 	// char8 is exception among primitive types
 
-	if (method.retType.type == ValueType::Char8 || (method.retType.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
+	if (ValueUtils::IsObject(method.retType.type) || ValueUtils::IsChar8(method.retType.type) || ValueUtils::IsFunction(method.retType.type))
 		return false;
 
 	for (const auto& param : method.paramTypes) {
-		if (param.type == ValueType::Char8 || (param.type >= ValueType::LastPrimitive && method.retType.type < ValueType::FirstPOD))
+		if (ValueUtils::IsObject(param.type) || ValueUtils::IsChar8(param.type) || ValueUtils::IsFunction(param.type))
 			return false;
 	}
 
@@ -416,10 +414,6 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	{
 		_plugin = LoadCoreClass(assemblyErrors, _core.image, "Plugin", 9);
-		//_vector2 = LoadCoreClass(assemblyErrors, _core.image, "Vector2", 2);
-		//_vector3 = LoadCoreClass(assemblyErrors, _core.image, "Vector3", 3);
-		//_vector4 = LoadCoreClass(assemblyErrors, _core.image, "Vector4", 4);
-		//_matrix4x4 = LoadCoreClass(assemblyErrors, _core.image, "Matrix4x4", 16);
 
 		if (!assemblyErrors.empty()) {
 			std::string classes("Not found: " + assemblyErrors[0]);
@@ -680,20 +674,19 @@ void CSharpLanguageModule::CleanupFunctionCache() {
 
 // Call from C# to C++
 void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
-	// TODO: Does mutex here good choose ?
 	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
 
 	size_t argsCount = std::count_if(method->paramTypes.begin(), method->paramTypes.end(), [](const Property& param) {
-		return param.type > ValueType::LastPrimitive && param.type < ValueType::FirstPOD;
+		return ValueUtils::IsObject(param.type);
 	});
 
 	ArgumentList args;
-	args.reserve(argsCount);
+	args.reserve(ValueUtils::IsObject(method->retType.type) ? argsCount + 1 : argsCount);
 
 	DCCallVM* vm = g_monolm._callVirtMachine.get();
 	dcReset(vm);
 
-	bool hasRet = true;
+	bool hasRet = ValueUtils::IsHiddenParam(method->retType.type);
 	bool hasRefs = false;
 
 	DCaggr* ag = nullptr;
@@ -754,26 +747,20 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		case ValueType::Vector2:
 			ag = CreateDcAggr<Vector2>();
 			dcBeginCallAggr(vm, ag);
-			hasRet = false;
 			break;
 		case ValueType::Vector3:
 			ag = CreateDcAggr<Vector3>();
 			dcBeginCallAggr(vm, ag);
-			hasRet = false;
 			break;
 		case ValueType::Vector4:
 			ag = CreateDcAggr<Vector4>();
 			dcBeginCallAggr(vm, ag);
-			hasRet = false;
 			break;
 		case ValueType::Matrix4x4:
 			ag = CreateDcAggr<Matrix4x4>();
 			dcBeginCallAggr(vm, ag);
-			hasRet = false;
 			break;
 		default:
-			// Should not require storage
-			hasRet = false;
 			break;
 	}
 
@@ -1417,7 +1404,7 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
-	bool hasRet = ValueTypeIsHiddenObjectParam(method->retType.type);
+	bool hasRet = ValueUtils::IsHiddenParam(method->retType.type);
 
 	ArgumentList args;
 	args.reserve(hasRet ? count - 1 : count);
@@ -1443,7 +1430,7 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
-	bool hasRet = ValueTypeIsHiddenObjectParam(method->retType.type);
+	bool hasRet = ValueUtils::IsHiddenParam(method->retType.type);
 
 	ArgumentList args;
 	args.reserve(hasRet ? count - 1 : count);
@@ -2149,14 +2136,17 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 	for (const auto& method : exportedMethods) {
 		auto separated = Utils::Split(method.funcName, ".");
-		if (separated.size() != 3) {
-			methodErrors.emplace_back(std::format("Invalid function name: '{}'. Please provide name in that format: 'Namespace.Class.Method'", method.funcName));
+		size_t size = separated.size();
+
+		bool noNamespace = (size == 2);
+		if (size != 3 && !noNamespace) {
+			methodErrors.emplace_back(std::format("Invalid function format: '{}'. Please provide name in that format: 'Namespace.Class.Method' or 'Namespace.MyParentClass/MyNestedClass.Method' or 'Class.Method'", method.funcName));
 			continue;
 		}
 
-		std::string nameSpace(separated[0]);
-		std::string className(separated[1]);
-		std::string methodName(separated[2]);
+		std::string nameSpace(noNamespace ? "" : separated[0]);
+		std::string className(separated[size-2]);
+		std::string methodName(separated[size-1]);
 
 		MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
 		if (!monoClass) {
@@ -2209,7 +2199,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		}
 
 		if (retType != methodReturnType) {
-			methodErrors.emplace_back(std::format("Method '{}' has invalid return type '{}' when it should have '{}'", method.funcName, ValueTypeToString(methodReturnType), ValueTypeToString(retType)));
+			methodErrors.emplace_back(std::format("Method '{}' has invalid return type '{}' when it should have '{}'", method.funcName, ValueUtils::ToString(methodReturnType), ValueUtils::ToString(retType)));
 			continue;
 		}
 
@@ -2242,7 +2232,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 			if (paramType != methodParamType) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Method '{}' has invalid param type '{}' at index {} when it should have '{}'", method.funcName, ValueTypeToString(methodParamType), i, ValueTypeToString(paramType)));
+				methodErrors.emplace_back(std::format("Method '{}' has invalid param type '{}' at index {} when it should have '{}'", method.funcName, ValueUtils::ToString(methodParamType), i, ValueUtils::ToString(paramType)));
 				continue;
 			}
 
@@ -2292,7 +2282,7 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 					mono_add_internal_call(funcName.c_str(), addr);
 				} else {
 					Function function(_rt);
-					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return type >= ValueType::HiddenParam; });
+					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return ValueUtils::IsBetween(type, ValueType::_HiddenParamStart, ValueType::_StructEnd); });
 					if (!methodAddr) {
 						_provider->Log(std::format(LOG_PREFIX "{}: {}", method.funcName, function.GetError()), Severity::Error);
 						continue;
@@ -2310,14 +2300,14 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 }
 
 void CSharpLanguageModule::OnPluginStart(const IPlugin& plugin) {
-	ScriptInstance* script = FindScript(plugin.GetName());
+	ScriptInstance* script = FindScript(plugin.GetId());
 	if (script) {
 		script->InvokeOnStart();
 	}
 }
 
 void CSharpLanguageModule::OnPluginEnd(const IPlugin& plugin) {
-	ScriptInstance* script = FindScript(plugin.GetName());
+	ScriptInstance* script = FindScript(plugin.GetId());
 	if (script) {
 		script->InvokeOnEnd();
 	}
@@ -2342,7 +2332,7 @@ ScriptInstance* CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin
 		if (!isPlugin)
 			continue;
 
-		const auto [it, result] = _scripts.try_emplace(plugin.GetName(), plugin, image, monoClass);
+		const auto [it, result] = _scripts.try_emplace(plugin.GetId(), plugin, image, monoClass);
 		if (result)
 			return &std::get<ScriptInstance>(*it);
 	}
@@ -2350,8 +2340,8 @@ ScriptInstance* CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin
 	return nullptr;
 }
 
-ScriptInstance* CSharpLanguageModule::FindScript(const std::string& name) {
-	auto it = _scripts.find(name);
+ScriptInstance* CSharpLanguageModule::FindScript(UniqueId id) {
+	auto it = _scripts.find(id);
 	if (it != _scripts.end())
 		return &std::get<ScriptInstance>(*it);
 	return nullptr;

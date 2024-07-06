@@ -15,18 +15,18 @@ MonoString* Core_GetBaseDirectory() {
 	return g_monolm.CreateString(baseDir.string());
 }
 
-bool Core_IsModuleLoaded(MonoString* name, int version, bool minimum) {
+bool Core_IsModuleLoaded(MonoString* name, int32_t version, bool minimum) {
 	auto requiredVersion = (version >= 0 && version != INT_MAX) ? std::make_optional(version) : std::nullopt;
 	return g_monolm.GetProvider()->IsModuleLoaded(MonoStringToUTF8(name), requiredVersion, minimum);
 }
 
-bool Core_IsPluginLoaded(MonoString* name, int version, bool minimum) {
+bool Core_IsPluginLoaded(MonoString* name, int32_t version, bool minimum) {
 	auto requiredVersion = (version >= 0 && version != INT_MAX) ? std::make_optional(version) : std::nullopt;
 	return g_monolm.GetProvider()->IsPluginLoaded(MonoStringToUTF8(name), requiredVersion, minimum);
 }
 
-MonoString* Plugin_FindResource(MonoString* name, MonoString* path) {
-	ScriptInstance* script = g_monolm.FindScript(MonoStringToUTF8(name));
+MonoString* Plugin_FindResource(int64_t id, MonoString* path) {
+	ScriptInstance* script = g_monolm.FindScript(id);
 	if (script) {
 		auto resource = script->GetPlugin().FindResource(MonoStringToUTF8(path));
 		if (resource.has_value()) {
@@ -36,15 +36,9 @@ MonoString* Plugin_FindResource(MonoString* name, MonoString* path) {
 	return nullptr;
 }
 
-MonoObject* Plugin_FindPluginByName(MonoString* name) {
-	ScriptInstance* script = g_monolm.FindScript(MonoStringToUTF8(name));
-	return script ? script->GetManagedObject() : nullptr;
-}
-
 void Glue::RegisterFunctions() {
 	PLUG_ADD_INTERNAL_CALL(Core_GetBaseDirectory);
 	PLUG_ADD_INTERNAL_CALL(Core_IsModuleLoaded);
 	PLUG_ADD_INTERNAL_CALL(Core_IsPluginLoaded);
 	PLUG_ADD_INTERNAL_CALL(Plugin_FindResource);
-	PLUG_ADD_INTERNAL_CALL(Plugin_FindPluginByName);
 }
