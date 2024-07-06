@@ -238,27 +238,27 @@ extern "C" PLUGIN_API Matrix4x4 NoParamReturnMatrix4x4()
 
 extern "C" PLUGIN_API void Param1(int a)
 {
-    std::cout << std::format("Param1: a = \n", a);
+    std::cout << std::format("Param1: a = {}\n", a);
 }
 
 extern "C" PLUGIN_API void Param2(int a, float b)
 {
-    std::cout << std::format("Param2: a = , b = \n", a, b);
+    std::cout << std::format("Param2: a = {}, b = {}\n", a, b);
 }
 
 extern "C" PLUGIN_API void Param3(int a, float b, double c)
 {
-    std::cout << std::format("Param3: a = , b = , c = \n", a, b, c);
+    std::cout << std::format("Param3: a = {}, b = {}, c = {}\n", a, b, c);
 }
 
 extern "C" PLUGIN_API void Param4(int a, float b, double c, const Vector4& d)
 {
-    std::cout << std::format("Param4: a = , b = , c = , d = [,,,]\n", a, b, c, d.x, d.y, d.z, d.w);
+    std::cout << std::format("Param4: a = {}, b = {}, c = {}, d = [{},{},{},{}]\n", a, b, c, d.x, d.y, d.z, d.w);
 }
 
 extern "C" PLUGIN_API void Param5(int a, float b, double c, const Vector4& d, const std::vector<int64_t>& e)
 {
-    std::cout << std::format("Param5: a = , b = , c = , d = [,,,], e.size() = , e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
+    std::cout << std::format("Param5: a = {}, b = {}, c = {}, d = [{},{},{},{}], e.size() = {}, e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
     for (const auto& elem : e) {
         std::cout << elem << ", ";
     }
@@ -267,47 +267,47 @@ extern "C" PLUGIN_API void Param5(int a, float b, double c, const Vector4& d, co
 
 extern "C" PLUGIN_API void Param6(int a, float b, double c, const Vector4& d, const std::vector<int64_t>& e, char f)
 {
-    std::cout << std::format("Param6: a = , b = , c = , d = [,,,], e.size() = , e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
+    std::cout << std::format("Param6: a = {}, b = {}, c = {}, d = [{},{},{},{}], e.size() = {}, e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
     for (const auto& elem : e) {
         std::cout << elem << ", ";
     }
-    std::cout << std::format("], f = \n", f);
+    std::cout << std::format("], f = {}\n", f);
 }
 
 extern "C" PLUGIN_API void Param7(int a, float b, double c, const Vector4& d, const std::vector<int64_t>& e, char f, const std::string& g)
 {
-    std::cout << std::format("Param7: a = , b = , c = , d = [,,,], e.size() = , e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
+    std::cout << std::format("Param7: a = {}, b = {}, c = {}, d = [{},{},{},{}], e.size() = {}, e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
     for (const auto& elem : e) {
         std::cout << elem << ", ";
     }
-    std::cout << std::format("], f = , g = \n", f, g);
+    std::cout << std::format("], f = {}, g = {}\n", f, g);
 }
 
 extern "C" PLUGIN_API void Param8(int a, float b, double c, const Vector4& d, const std::vector<int64_t>& e, char f, const std::string& g, float h)
 {
-    std::cout << std::format("Param8: a = , b = , c = , d = [,,,], e.size() = , e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
+    std::cout << std::format("Param8: a = {}, b = {}, c = {}, d = [{},{},{},{}], e.size() = {}, e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
     for (const auto& elem : e) {
         std::cout << elem << ", ";
     }
-    std::cout << std::format("], f = , g = , h = \n", f, g, h);
+    std::cout << std::format("], f = {}, g = {}, h = {}\n", f, g, h);
 }
 
 extern "C" PLUGIN_API void Param9(int a, float b, double c, const Vector4& d, const std::vector<int64_t>& e, char f, const std::string& g, float h, int16_t k)
 {
-    std::cout << std::format("Param9: a = , b = , c = , d = [,,,], e.size() = , e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
+    std::cout << std::format("Param9: a = {}, b = {}, c = {}, d = [{},{},{},{}], e.size() = {}, e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
     for (const auto& elem : e) {
         std::cout << elem << ", ";
     }
-    std::cout << std::format("], f = , g = , h = , k = \n", f, g, h, k);
+    std::cout << std::format("], f = {}, g = {}, h = {}, k = {}\n", f, g, h, k);
 }
 
 extern "C" PLUGIN_API void Param10(int a, float b, double c, const Vector4& d, const std::vector<int64_t>& e, char f, const std::string& g, float h, int16_t k, void* l)
 {
-    std::cout << std::format("Param10: a = , b = , c = , d = [,,,], e.size() = , e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
+    std::cout << std::format("Param10: a = {}, b = {}, c = {}, d = [{},{},{},{}], e.size() = {}, e = [", a, b, c, d.x, d.y, d.z, d.w, e.size());
     for (const auto& elem : e) {
         std::cout << elem << ", ";
     }
-    std::cout << std::format("], f = , g = , h = , k = , l = \n", f, g, h, k, l);
+    std::cout << std::format("], f = {}, g = {}, h = {}, k = {}, l = {}\n", f, g, h, k, l);
 }
 
 // Params (with refs)
