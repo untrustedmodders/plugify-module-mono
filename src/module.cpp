@@ -2436,16 +2436,11 @@ template<typename T>
 MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, MonoClass* klass) {
 	MonoArray* array = CreateArray(klass, source.size());
 	for (size_t i = 0; i < source.size(); ++i) {
-		mono_array_set(array, T, i, source[i]);
-	}
-	return array;
-}
-
-template<>
-MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<char>& source, MonoClass* klass) {
-	MonoArray* array = CreateArray(klass, source.size());
-	for (size_t i = 0; i < source.size(); ++i) {
-		mono_array_set(array, char16_t, i, static_cast<char16_t>(source[i]));
+		if constexpr (std::same_as<T, char>) {
+			mono_array_set(array, char16_t, i, static_cast<char16_t>(source[i]));
+		} else {
+			mono_array_set(array, T, i, source[i]);
+		}
 	}
 	return array;
 }

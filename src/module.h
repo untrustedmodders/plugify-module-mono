@@ -114,8 +114,6 @@ namespace monolm {
 
 		template<typename T>
 		MonoArray* CreateArrayT(const std::vector<T>& source, MonoClass* klass);
-		template<>
-		MonoArray* CreateArrayT(const std::vector<char>& source, MonoClass* klass);
 		MonoDelegate* CreateDelegate(void* func, plugify::IMethod method);
 		template<typename T>
 		MonoString* CreateString(const T& source) const;
