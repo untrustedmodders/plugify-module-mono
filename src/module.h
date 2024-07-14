@@ -39,11 +39,11 @@ struct std::default_delete<MonoReferenceQueue> {
 namespace monolm {
 	class ScriptInstance {
 	public:
-		ScriptInstance(plugify::IPlugin plugin, MonoImage* image, MonoClass* klass);
+		ScriptInstance(plugify::PluginRef plugin, MonoImage* image, MonoClass* klass);
 		ScriptInstance(ScriptInstance&& other) = default;
 		~ScriptInstance() = default;
 
-		plugify::IPlugin GetPlugin() const { return _plugin; }
+		plugify::PluginRef GetPlugin() const { return _plugin; }
 		MonoObject* GetManagedObject() const { return _instance; }
 
 	private:
@@ -51,7 +51,7 @@ namespace monolm {
 		void InvokeOnEnd() const;
 
 	private:
-		plugify::IPlugin _plugin;
+		plugify::PluginRef _plugin;
 		MonoImage* _image{ nullptr };
 		MonoClass* _klass{ nullptr };
 		MonoObject* _instance{ nullptr };
@@ -100,12 +100,12 @@ namespace monolm {
 		~CSharpLanguageModule() = default;
 
 		// ILanguageModule
-		plugify::InitResult Initialize(std::weak_ptr<plugify::IPlugifyProvider> provider, plugify::IModule module) override;
+		plugify::InitResult Initialize(std::weak_ptr<plugify::IPlugifyProvider> provider, plugify::ModuleRef module) override;
 		void Shutdown() override;
-		plugify::LoadResult OnPluginLoad(plugify::IPlugin plugin) override;
-		void OnPluginStart(plugify::IPlugin plugin) override;
-		void OnPluginEnd(plugify::IPlugin plugin) override;
-		void OnMethodExport(plugify::IPlugin plugin) override;
+		plugify::LoadResult OnPluginLoad(plugify::PluginRef plugin) override;
+		void OnPluginStart(plugify::PluginRef plugin) override;
+		void OnPluginEnd(plugify::PluginRef plugin) override;
+		void OnMethodExport(plugify::PluginRef plugin) override;
 
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptInstance* FindScript(plugify::UniqueId id);
@@ -114,7 +114,7 @@ namespace monolm {
 
 		template<typename T>
 		MonoArray* CreateArrayT(const std::vector<T>& source, MonoClass* klass);
-		MonoDelegate* CreateDelegate(void* func, plugify::IMethod method);
+		MonoDelegate* CreateDelegate(void* func, plugify::MethodRef method);
 		template<typename T>
 		MonoString* CreateString(const T& source) const;
 		MonoArray* CreateArray(MonoClass* klass, size_t count) const;
@@ -126,7 +126,7 @@ namespace monolm {
 		bool InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath);
 		void ShutdownMono();
 
-		ScriptInstance* CreateScriptInstance(plugify::IPlugin plugin, MonoImage* image);
+		ScriptInstance* CreateScriptInstance(plugify::PluginRef plugin, MonoImage* image);
 
 	private:
 		static void HandleException(MonoObject* exc, void* userData);
@@ -134,22 +134,22 @@ namespace monolm {
 		static void OnPrintCallback(const char* message, mono_bool isStdout);
 		static void OnPrintErrorCallback(const char* message, mono_bool isStdout);
 
-		static void ExternalCall(plugify::IMethod method, plugify::MemAddr addr, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
-		static void InternalCall(plugify::IMethod method, plugify::MemAddr data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
-		static void DelegateCall(plugify::IMethod method, plugify::MemAddr data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
+		static void ExternalCall(plugify::MethodRef method, plugify::MemAddr addr, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
+		static void InternalCall(plugify::MethodRef method, plugify::MemAddr data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
+		static void DelegateCall(plugify::MethodRef method, plugify::MemAddr data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
 
 		static void DeleteParam(const ArgumentList& args, size_t& i, plugify::ValueType type);
 		static void DeleteReturn(const ArgumentList& args, size_t& i, plugify::ValueType type);
-		static void SetReturn(plugify::IProperty retProp, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
-		static void SetParams(const std::vector<plugify::IProperty>& paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
-		static void SetReferences(const std::vector<plugify::IProperty>& paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
+		static void SetReturn(plugify::PropertyRef retProp, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
+		static void SetParams(const std::vector<plugify::PropertyRef>& paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
+		static void SetReferences(const std::vector<plugify::PropertyRef>& paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
 
 		template<typename T>
 		static void* MonoStructToArg(ArgumentList& args);
 		template<typename T>
 		static void* MonoArrayToArg(MonoArray* source, ArgumentList& args);
 		static void* MonoStringToArg(MonoString* source, ArgumentList& args);
-		void* MonoDelegateToArg(MonoDelegate* source, plugify::IMethod method);
+		void* MonoDelegateToArg(MonoDelegate* source, plugify::MethodRef method);
 
 		void CleanupFunctionCache();
 

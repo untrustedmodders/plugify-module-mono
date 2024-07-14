@@ -66,7 +66,7 @@ void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const noexcept {
 	mono_domain_unload(domain);
 }
 
-bool IsMethodPrimitive(const plugify::IMethod& method) {
+bool IsMethodPrimitive(const plugify::MethodRef& method) {
 	// char8 is exception among primitive types
 
 	ValueType retType = method.GetReturnType().GetType();
@@ -384,7 +384,7 @@ void FunctionRefQueueCallback(void* function) {
 	delete reinterpret_cast<Function*>(function);
 }
 
-InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> provider, IModule module) {
+InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> provider, ModuleRef module) {
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
@@ -640,7 +640,7 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& ar
 	return dest;
 }
 
-void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, plugify::IMethod method) {
+void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, plugify::MethodRef method) {
 	if (source == nullptr) {
 		_provider->Log(LOG_PREFIX "Delegate is null", Severity::Warning);
 
@@ -698,14 +698,14 @@ void CSharpLanguageModule::CleanupFunctionCache() {
 }
 
 // Call from C# to C++
-void CSharpLanguageModule::ExternalCall(IMethod method, MemAddr addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
 
-	IProperty retProp = method.GetReturnType();
+	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
-	std::vector<IProperty> paramProps = method.GetParamTypes();
+	std::vector<PropertyRef> paramProps = method.GetParamTypes();
 
-	size_t argsCount = static_cast<size_t>(std::count_if(paramProps.begin(),paramProps.end(), [](const IProperty& param) {
+	size_t argsCount = static_cast<size_t>(std::count_if(paramProps.begin(),paramProps.end(), [](const PropertyRef& param) {
 		return ValueUtils::IsObject(param.GetType());
 	}));
 
@@ -1300,7 +1300,7 @@ void CSharpLanguageModule::ExternalCall(IMethod method, MemAddr addr, const Para
 				}
 			}
 		}
-		
+
 		size_t j = 0;
 
 		if (hasRet) {
@@ -1428,12 +1428,12 @@ void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, size_t& i, Val
 }
 
 // Call from C++ to C#
-void CSharpLanguageModule::InternalCall(IMethod method, MemAddr data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+void CSharpLanguageModule::InternalCall(MethodRef method, MemAddr data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	const auto& [monoMethod, monoObject] = *data.RCast<ExportMethod*>();
 
-	IProperty retProp = method.GetReturnType();
+	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
-	std::vector<IProperty> paramProps = method.GetParamTypes();
+	std::vector<PropertyRef> paramProps = method.GetParamTypes();
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
@@ -1458,12 +1458,12 @@ void CSharpLanguageModule::InternalCall(IMethod method, MemAddr data, const Para
 }
 
 // Call from C++ to C#
-void CSharpLanguageModule::DelegateCall(IMethod method, MemAddr data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+void CSharpLanguageModule::DelegateCall(MethodRef method, MemAddr data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	auto* monoDelegate = data.RCast<MonoObject*>();
 
-	IProperty retProp = method.GetReturnType();
+	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
-	std::vector<IProperty> paramProps = method.GetParamTypes();
+	std::vector<PropertyRef> paramProps = method.GetParamTypes();
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
@@ -1487,7 +1487,7 @@ void CSharpLanguageModule::DelegateCall(IMethod method, MemAddr data, const Para
 	SetReturn(retProp, p, ret, result);
 }
 
-void CSharpLanguageModule::SetParams(const std::vector<IProperty>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
+void CSharpLanguageModule::SetParams(const std::vector<PropertyRef>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
 	for (uint8_t i = hasRet, j = 0; i < count; ++i, ++j) {
 		void* arg;
 		const auto& param = paramProps[j];
@@ -1699,7 +1699,7 @@ void CSharpLanguageModule::SetParams(const std::vector<IProperty>& paramProps, c
 	}
 }
 
-void CSharpLanguageModule::SetReferences(const std::vector<IProperty>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
+void CSharpLanguageModule::SetReferences(const std::vector<PropertyRef>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
 	if (hasRefs) {
 		for (uint8_t i = hasRet, j = 0; i < count; ++i, ++j) {
 			const auto& param = paramProps[j];
@@ -1869,7 +1869,7 @@ void CSharpLanguageModule::SetReferences(const std::vector<IProperty>& paramProp
 	}
 }
 
-void CSharpLanguageModule::SetReturn(IProperty retProp, const Parameters* p, const ReturnValue* ret, MonoObject* result) {
+void CSharpLanguageModule::SetReturn(PropertyRef retProp, const Parameters* p, const ReturnValue* ret, MonoObject* result) {
 	if (result) {
 		switch (retProp.GetType()) {
 			case ValueType::Bool: {
@@ -2148,7 +2148,7 @@ void CSharpLanguageModule::SetReturn(IProperty retProp, const Parameters* p, con
 	}
 }
 
-LoadResult CSharpLanguageModule::OnPluginLoad(IPlugin plugin) {
+LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
 
 	fs::path assemblyPath(plugin.GetBaseDir());
@@ -2168,7 +2168,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(IPlugin plugin) {
 
 	std::vector<std::string> methodErrors;
 
-	std::vector<IMethod> exportedMethods = plugin.GetDescriptor().GetExportedMethods();
+	std::vector<MethodRef> exportedMethods = plugin.GetDescriptor().GetExportedMethods();
 	std::vector<MethodData> methods;
 	methods.reserve(exportedMethods.size());
 
@@ -2209,7 +2209,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(IPlugin plugin) {
 		MonoMethodSignature* sig = mono_method_signature(monoMethod);
 
 		uint32_t paramCount = mono_signature_get_param_count(sig);
-		std::vector<IProperty> paramTypes = method.GetParamTypes();
+		std::vector<PropertyRef> paramTypes = method.GetParamTypes();
 		if (paramCount != paramTypes.size()) {
 			methodErrors.emplace_back(std::format("Method '{}' has invalid parameter count {} when it should have {}", method.GetFunctionName(), paramTypes.size(), paramCount));
 			continue;
@@ -2306,7 +2306,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(IPlugin plugin) {
 	return LoadResultData{ std::move(methods) };
 }
 
-void CSharpLanguageModule::OnMethodExport(IPlugin plugin) {
+void CSharpLanguageModule::OnMethodExport(PluginRef plugin) {
 	for (const auto& [name, addr] : plugin.GetMethods()) {
 		auto pluginName = plugin.GetName();
 		auto funcName = std::format("{}.{}::{}", pluginName, pluginName, name);
@@ -2339,21 +2339,21 @@ void CSharpLanguageModule::OnMethodExport(IPlugin plugin) {
 	}
 }
 
-void CSharpLanguageModule::OnPluginStart(IPlugin plugin) {
+void CSharpLanguageModule::OnPluginStart(PluginRef plugin) {
 	ScriptInstance* script = FindScript(plugin.GetId());
 	if (script) {
 		script->InvokeOnStart();
 	}
 }
 
-void CSharpLanguageModule::OnPluginEnd(IPlugin plugin) {
+void CSharpLanguageModule::OnPluginEnd(PluginRef plugin) {
 	ScriptInstance* script = FindScript(plugin.GetId());
 	if (script) {
 		script->InvokeOnEnd();
 	}
 }
 
-ScriptInstance* CSharpLanguageModule::CreateScriptInstance(IPlugin plugin, MonoImage* image) {
+ScriptInstance* CSharpLanguageModule::CreateScriptInstance(PluginRef plugin, MonoImage* image) {
 	const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
 	int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
 
@@ -2387,7 +2387,7 @@ ScriptInstance* CSharpLanguageModule::FindScript(UniqueId id) {
 	return nullptr;
 }
 
-MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::IMethod method) {
+MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::MethodRef method) {
 	auto it = _cachedDelegates.find(func);
 	if (it != _cachedDelegates.end()) {
 		MonoObject* object = mono_gchandle_get_target(std::get<uint32_t>(*it));
@@ -2395,7 +2395,7 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::IMethod 
 			return reinterpret_cast<MonoDelegate*>(object);
 		}
 	}
-	
+
 	const auto& delegateClasses = method.GetReturnType().GetType() != ValueType::Void ? _funcClasses : _actionClasses;
 
 	size_t paramCount = method.GetParamTypes().size();
@@ -2406,7 +2406,7 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::IMethod 
 
 	MonoClass* delegateClass = delegateClasses[paramCount];
 	MonoDelegate* delegate;
-	
+
 	if (IsMethodPrimitive(method)) {
 		delegate = mono_ftnptr_to_delegate(delegateClass, func);
 	} else {
@@ -2415,15 +2415,15 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::IMethod 
 		delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
 		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
 	}
-	
+
 	uint32_t ref = mono_gchandle_new_weakref(reinterpret_cast<MonoObject*>(delegate), 0);
-	
+
 	if (it != _cachedDelegates.end()) {
 		std::get<uint32_t>(*it) = ref;
 	} else {
 		_cachedDelegates.emplace(func, ref);
 	}
-	
+
 	return delegate;
 }
 
@@ -2554,12 +2554,12 @@ void CSharpLanguageModule::OnPrintErrorCallback(const char* message, mono_bool /
 
 /*_________________________________________________*/
 
-ScriptInstance::ScriptInstance(IPlugin plugin, MonoImage* image, MonoClass* klass) : _plugin{plugin}, _image{image}, _klass{klass} {
+ScriptInstance::ScriptInstance(PluginRef plugin, MonoImage* image, MonoClass* klass) : _plugin{plugin}, _image{image}, _klass{klass} {
 	_instance = g_monolm.InstantiateClass(klass);
 
 	UniqueId id = plugin.GetId();
-	IPluginDescriptor desc = plugin.GetDescriptor();
-	std::vector<IPluginReferenceDescriptor> deps = desc.GetDependencies();
+	PluginDescriptorRef desc = plugin.GetDescriptor();
+	std::vector<PluginReferenceDescriptorRef> deps = desc.GetDependencies();
 
 	std::vector<std::string_view> dependencies;
 	dependencies.reserve(deps.size());
