@@ -16,6 +16,7 @@
 #include <plugify/log.h>
 #include <plugify/math.h>
 #include <plugify/plugin_descriptor.h>
+#include <plugify/plugin_reference_descriptor.h>
 #include <plugify/plugify_provider.h>
 
 #include <cpptrace/cpptrace.hpp>
@@ -65,14 +66,16 @@ void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const noexcept {
 	mono_domain_unload(domain);
 }
 
-bool IsMethodPrimitive(const plugify::Method& method) {
+bool IsMethodPrimitive(const plugify::IMethod& method) {
 	// char8 is exception among primitive types
 
-	if (ValueUtils::IsObject(method.retType.type) || ValueUtils::IsChar8(method.retType.type) || ValueUtils::IsFunction(method.retType.type))
+	ValueType retType = method.GetReturnType().GetType();
+	if (ValueUtils::IsObject(retType) || ValueUtils::IsChar8(retType) || ValueUtils::IsFunction(retType))
 		return false;
 
-	for (const auto& param : method.paramTypes) {
-		if (ValueUtils::IsObject(param.type) || ValueUtils::IsChar8(param.type) || ValueUtils::IsFunction(param.type))
+	for (const auto& param : method.GetParamTypes()) {
+		ValueType paramType = param.GetType();
+		if (ValueUtils::IsObject(paramType) || ValueUtils::IsChar8(paramType) || ValueUtils::IsFunction(paramType))
 			return false;
 	}
 
@@ -94,25 +97,45 @@ std::string monolm::MonoStringToUTF8(MonoString* string) {
 	return result;
 }
 
+/*std::wstring monolm::MonoStringToUTF16(MonoString* string) {
+	if (string == nullptr || mono_string_length(string) == 0)
+		return {};
+	wchar_t* utf16 = mono_string_to_utf16(string);
+	std::wstring result(utf16);
+	mono_free(utf16);
+	return result;
+}*/
+
 template<typename T>
 void monolm::MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
 	auto length = mono_array_length(array);
 	dest.resize(length);
 	for (size_t i = 0; i < length; ++i) {
-		if constexpr (std::is_same_v<T, std::string>) {
-			MonoObject* element = mono_array_get(array, MonoObject*, i);
-			if (element != nullptr)
-				dest[i] = MonoStringToUTF8(reinterpret_cast<MonoString*>(element));
-			else
-				dest[i] = T{};
-		} else if constexpr (std::is_same_v<T, char>) {
-			dest[i] = static_cast<char>(mono_array_get(array, char16_t, i));
-		} else {
-			dest[i] = mono_array_get(array, T, i);
-		}
+		dest[i] = mono_array_get(array, T, i);
 	}
 }
 
+template<>
+void monolm::MonoArrayToVector(MonoArray* array, std::vector<char>& dest) {
+	auto length = mono_array_length(array);
+	dest.resize(length);
+	for (size_t i = 0; i < length; ++i) {
+		dest[i] = static_cast<char>(mono_array_get(array, char16_t, i));
+	}
+}
+
+template<>
+void monolm::MonoArrayToVector(MonoArray* array, std::vector<std::string>& dest) {
+	auto length = mono_array_length(array);
+	dest.resize(length);
+	for (size_t i = 0; i < length; ++i) {
+		MonoObject* element = mono_array_get(array, MonoObject*, i);
+		if (element != nullptr)
+			dest[i] = MonoStringToUTF8(reinterpret_cast<MonoString*>(element));
+		else
+			dest[i] = {};
+	}
+}
 ValueType MonoTypeToValueType(const char* typeName) {
 	static std::unordered_map<std::string, ValueType> valueTypeMap = {
 			{ "System.Void", ValueType::Void },
@@ -361,23 +384,25 @@ void FunctionRefQueueCallback(void* function) {
 	delete reinterpret_cast<Function*>(function);
 }
 
-InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> provider, const IModule& module) {
+InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> provider, IModule module) {
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
-	const char* settingsFile = "configs/mono-lang-module.json";
+ 	fs::path settingsFile("configs/mono-lang-module.json");
 
 	auto settingsPath = module.FindResource(settingsFile);
 	if (!settingsPath.has_value())
-		return ErrorData{ std::format("File '{}' has not been found", settingsFile) };
+		return ErrorData{ std::format("File '{}' has not been found", settingsFile.string()) };
 
 	auto json = Utils::ReadText(*settingsPath);
 	auto settings = glz::read_json<MonoSettings>(json);
 	if (!settings.has_value())
-		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile, glz::format_error(settings.error(), json)) };
+		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile.string(), glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
-	fs::path monoPath(module.GetBaseDir() / "mono/");
+	fs::path monoPath(module.GetBaseDir());
+	monoPath /=  "mono";
+
 	auto configPath = module.FindResource("configs/mono_config");
 
 	if (!InitMono(monoPath, configPath))
@@ -399,7 +424,8 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	std::vector<std::string> assemblyErrors;
 
 	{
-		fs::path assemblyPath(module.GetBaseDir() / "bin/Plugify.dll");
+		fs::path assemblyPath(module.GetBaseDir());
+		assemblyPath /= "bin/Plugify.dll";
 
 		_core = LoadCoreAssembly(assemblyErrors, assemblyPath, _settings.enableDebugging);
 
@@ -408,7 +434,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 			for (auto it = std::next(assemblyErrors.begin()); it != assemblyErrors.end(); ++it) {
 				std::format_to(std::back_inserter(assemblies), ", {}", *it);
 			}
-			return ErrorData{ std::move(assemblies) };
+			return ErrorData{ assemblies };
 		}
 	}
 
@@ -420,7 +446,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 			for (auto it = std::next(assemblyErrors.begin()); it != assemblyErrors.end(); ++it) {
 				std::format_to(std::back_inserter(classes), ", {}", *it);
 			}
-			return ErrorData{ std::move(classes) };
+			return ErrorData{ classes };
 		}
 	}
 
@@ -485,7 +511,6 @@ void CSharpLanguageModule::Shutdown() {
 	_importMethods.clear();
 	_exportMethods.clear();
 	_functions.clear();
-	_methods.clear();
 	_scripts.clear();
 	_callVirtMachine.reset();
 	_rt.reset();
@@ -615,7 +640,7 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& ar
 	return dest;
 }
 
-void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, const plugify::Method& method) {
+void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, plugify::IMethod method) {
 	if (source == nullptr) {
 		_provider->Log(LOG_PREFIX "Delegate is null", Severity::Warning);
 
@@ -673,27 +698,31 @@ void CSharpLanguageModule::CleanupFunctionCache() {
 }
 
 // Call from C# to C++
-void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+void CSharpLanguageModule::ExternalCall(IMethod method, MemAddr addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
 	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
 
-	size_t argsCount = std::count_if(method->paramTypes.begin(), method->paramTypes.end(), [](const Property& param) {
-		return ValueUtils::IsObject(param.type);
-	});
+	IProperty retProp = method.GetReturnType();
+	ValueType retType = retProp.GetType();
+	std::vector<IProperty> paramProps = method.GetParamTypes();
+
+	size_t argsCount = static_cast<size_t>(std::count_if(paramProps.begin(),paramProps.end(), [](const IProperty& param) {
+		return ValueUtils::IsObject(param.GetType());
+	}));
 
 	ArgumentList args;
-	args.reserve(ValueUtils::IsObject(method->retType.type) ? argsCount + 1 : argsCount);
+	args.reserve(ValueUtils::IsObject(retType) ? argsCount + 1 : argsCount);
 
 	DCCallVM* vm = g_monolm._callVirtMachine.get();
 	dcReset(vm);
 
-	bool hasRet = ValueUtils::IsHiddenParam(method->retType.type);
+	bool hasRet = ValueUtils::IsHiddenParam(retType);
 	bool hasRefs = false;
 
 	DCaggr* ag = nullptr;
 
 	// Store parameters
 
-	switch (method->retType.type) {
+	switch (retType) {
 		// MonoString*
 		case ValueType::String:
 			dcArgPointer(vm, AllocateMemory<std::string>(args));
@@ -765,9 +794,9 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 	}
 
 	for (uint8_t i = 0; i < count; ++i) {
-		const auto& param = method->paramTypes[i];
-		if (param.ref) {
-			switch (param.type) {
+		const auto& param = paramProps[i];
+		if (param.IsReference()) {
+			switch (param.GetType()) {
 				case ValueType::Bool:
 					dcArgPointer(vm, p->GetArgument<bool*>(i));
 					break;
@@ -824,7 +853,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 				// MonoDelegate*
 				case ValueType::Function:
-					dcArgPointer(vm, g_monolm.MonoDelegateToArg(*p->GetArgument<MonoDelegate**>(i), *param.prototype));
+					dcArgPointer(vm, g_monolm.MonoDelegateToArg(*p->GetArgument<MonoDelegate**>(i), *param.GetPrototype()));
 					break;
 				// MonoString*
 				case ValueType::String:
@@ -882,7 +911,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 			}
 		} else {
-			switch (param.type) {
+			switch (param.GetType()) {
 				case ValueType::Bool:
 					dcArgBool(vm, p->GetArgument<bool>(i));
 					break;
@@ -931,7 +960,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 				// MonoDelegate*
 				case ValueType::Function:
-					dcArgPointer(vm, g_monolm.MonoDelegateToArg(p->GetArgument<MonoDelegate*>(i), *param.prototype));
+					dcArgPointer(vm, g_monolm.MonoDelegateToArg(p->GetArgument<MonoDelegate*>(i), *param.GetPrototype()));
 					break;
 				// MonoString*
 				case ValueType::String:
@@ -989,12 +1018,12 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 					break;
 			}
 		}
-		hasRefs |= param.ref;
+		hasRefs |= param.IsReference();
 	}
 
 	// Call function and store return
 
-	switch (method->retType.type) {
+	switch (retType) {
 		case ValueType::Void: {
 			dcCallVoid(vm, addr);
 			break;
@@ -1071,7 +1100,7 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		}
 		case ValueType::Function: {
 			void* val = dcCallPointer(vm, addr);
-			ret->SetReturnPtr(g_monolm.CreateDelegate(val, *method->retType.prototype));
+			ret->SetReturnPtr(g_monolm.CreateDelegate(val, *retProp.GetPrototype()));
 			break;
 		}
 		case ValueType::Vector2: {
@@ -1211,9 +1240,9 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 
 			if (j < argsCount) {
 				for (uint8_t i = 0; i < count; ++i) {
-					const auto& param = method->paramTypes[i];
-					if (param.ref) {
-						switch (param.type) {
+					const auto& param = paramProps[i];
+					if (param.IsReference()) {
+						switch (param.GetType()) {
 							case ValueType::String:
 								p->SetArgumentAt(i, g_monolm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
 								break;
@@ -1275,12 +1304,12 @@ void CSharpLanguageModule::ExternalCall(const Method* method, void* addr, const 
 		size_t j = 0;
 
 		if (hasRet) {
-			DeleteReturn(args, j, method->retType.type);
+			DeleteReturn(args, j, retType);
 		}
 
 		if (j < argsCount) {
 			for (uint8_t i = 0; i < count; ++i) {
-				DeleteParam(args, j, method->paramTypes[i].type);
+				DeleteParam(args, j, paramProps[i].GetType());
 				if (j == argsCount)
 					break;
 			}
@@ -1399,17 +1428,21 @@ void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, size_t& i, Val
 }
 
 // Call from C++ to C#
-void CSharpLanguageModule::InternalCall(const Method* method, void* data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
-	const auto& [monoMethod, monoObject] = *reinterpret_cast<ExportMethod*>(data);
+void CSharpLanguageModule::InternalCall(IMethod method, MemAddr data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+	const auto& [monoMethod, monoObject] = *data.RCast<ExportMethod*>();
+
+	IProperty retProp = method.GetReturnType();
+	ValueType retType = retProp.GetType();
+	std::vector<IProperty> paramProps = method.GetParamTypes();
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
-	bool hasRet = ValueUtils::IsHiddenParam(method->retType.type);
+	bool hasRet = ValueUtils::IsHiddenParam(retType);
 
 	ArgumentList args;
 	args.reserve(hasRet ? count - 1 : count);
 
-	SetParams(method, p, count, hasRet, hasRefs, args);
+	SetParams(paramProps, p, count, hasRet, hasRefs, args);
 
 	MonoObject* exception = nullptr;
 	MonoObject* result = mono_runtime_invoke(monoMethod, monoObject, args.data(), &exception);
@@ -1419,23 +1452,27 @@ void CSharpLanguageModule::InternalCall(const Method* method, void* data, const 
 		return;
 	}
 
-	SetReferences(method, p, count, hasRet, hasRefs, args);
+	SetReferences(paramProps, p, count, hasRet, hasRefs, args);
 
-	SetReturn(method, p, ret, result);
+	SetReturn(retProp, p, ret, result);
 }
 
 // Call from C++ to C#
-void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
-	auto* monoDelegate = reinterpret_cast<MonoObject*>(data);
+void CSharpLanguageModule::DelegateCall(IMethod method, MemAddr data, const Parameters* p, uint8_t count, const ReturnValue* ret) {
+	auto* monoDelegate = data.RCast<MonoObject*>();
+
+	IProperty retProp = method.GetReturnType();
+	ValueType retType = retProp.GetType();
+	std::vector<IProperty> paramProps = method.GetParamTypes();
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
-	bool hasRet = ValueUtils::IsHiddenParam(method->retType.type);
+	bool hasRet = ValueUtils::IsHiddenParam(retType);
 
 	ArgumentList args;
 	args.reserve(hasRet ? count - 1 : count);
 
-	SetParams(method, p, count, hasRet, hasRefs, args);
+	SetParams(paramProps, p, count, hasRet, hasRefs, args);
 
 	MonoObject* exception = nullptr;
 	MonoObject* result = mono_runtime_delegate_invoke(monoDelegate, args.data(), &exception);
@@ -1445,17 +1482,17 @@ void CSharpLanguageModule::DelegateCall(const Method* method, void* data, const 
 		return;
 	}
 
-	SetReferences(method, p, count, hasRet, hasRefs, args);
+	SetReferences(paramProps, p, count, hasRet, hasRefs, args);
 
-	SetReturn(method, p, ret, result);
+	SetReturn(retProp, p, ret, result);
 }
 
-void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
+void CSharpLanguageModule::SetParams(const std::vector<IProperty>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
 	for (uint8_t i = hasRet, j = 0; i < count; ++i, ++j) {
 		void* arg;
-		const auto& param = method->paramTypes[j];
-		if (param.ref) {
-			switch (param.type) {
+		const auto& param = paramProps[j];
+		if (param.IsReference()) {
+			switch (param.GetType()) {
 				case ValueType::Bool:
 					arg = p->GetArgument<bool*>(i);
 					break;
@@ -1511,7 +1548,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					arg = p->GetArgument<Matrix4x4*>(i);
 					break;
 				case ValueType::Function:
-					arg = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.prototype);
+					arg = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.GetPrototype());
 					break;
 				case ValueType::String:
 					arg = new MonoString*[1]{ g_monolm.CreateString(*p->GetArgument<std::string*>(i)) };
@@ -1568,7 +1605,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 			}
 			hasRefs |= true;
 		} else {
-			switch (param.type) {
+			switch (param.GetType()) {
 				case ValueType::Bool:
 				case ValueType::Char16:
 				case ValueType::Int8:
@@ -1600,7 +1637,7 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					arg = new char16_t(static_cast<char16_t>(p->GetArgument<char>(i)));
 					break;
 				case ValueType::Function:
-					arg = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.prototype);
+					arg = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.GetPrototype());
 					break;
 				case ValueType::String:
 					arg = g_monolm.CreateString(*p->GetArgument<std::string*>(i));
@@ -1656,18 +1693,18 @@ void CSharpLanguageModule::SetParams(const Method* method, const Parameters* p, 
 					break;
 			}
 			// @TODO Temp HACK
-			hasRefs |= (param.type == ValueType::Char8);
+			hasRefs |= (param.GetType() == ValueType::Char8);
 		}
 		args.push_back(arg);
 	}
 }
 
-void CSharpLanguageModule::SetReferences(const Method* method, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
+void CSharpLanguageModule::SetReferences(const std::vector<IProperty>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
 	if (hasRefs) {
 		for (uint8_t i = hasRet, j = 0; i < count; ++i, ++j) {
-			const auto& param = method->paramTypes[j];
-			if (param.ref) {
-				switch (param.type) {
+			const auto& param = paramProps[j];
+			if (param.IsReference()) {
+				switch (param.GetType()) {
 					case ValueType::Char8: {
 						auto* source = reinterpret_cast<char16_t*>(args[j]);
 						auto* dest = p->GetArgument<char*>(i);
@@ -1824,7 +1861,7 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 				}
 			} else {
 				// @TODO Refactor this
-				if (param.type == ValueType::Char8) {
+				if (param.GetType() == ValueType::Char8) {
 					delete reinterpret_cast<char16_t*>(args[j]);
 				}
 			}
@@ -1832,9 +1869,9 @@ void CSharpLanguageModule::SetReferences(const Method* method, const Parameters*
 	}
 }
 
-void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, const ReturnValue* ret, MonoObject* result) {
+void CSharpLanguageModule::SetReturn(IProperty retProp, const Parameters* p, const ReturnValue* ret, MonoObject* result) {
 	if (result) {
-		switch (method->retType.type) {
+		switch (retProp.GetType()) {
 			case ValueType::Bool: {
 				bool val = *reinterpret_cast<bool*>(mono_object_unbox(result));
 				ret->SetReturnPtr(val);
@@ -1946,7 +1983,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 			}
 			case ValueType::Function: {
 				auto* source = reinterpret_cast<MonoDelegate*>(result);
-				ret->SetReturnPtr(g_monolm.MonoDelegateToArg(source, *(method->retType.prototype)));
+				ret->SetReturnPtr(g_monolm.MonoDelegateToArg(source, *retProp.GetPrototype()));
 				break;
 			}
 			case ValueType::String: {
@@ -2097,7 +2134,7 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 				break;
 		}
 	} else {
-		switch (method->retType.type) {
+		switch (retProp.GetType()) {
 			case ValueType::Invalid:
 				std::puts(LOG_PREFIX "Unsupported types!\n");
 				std::terminate();
@@ -2111,10 +2148,11 @@ void CSharpLanguageModule::SetReturn(const Method* method, const Parameters* p, 
 	}
 }
 
-LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
+LoadResult CSharpLanguageModule::OnPluginLoad(IPlugin plugin) {
 	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
 
-	fs::path assemblyPath(plugin.GetBaseDir() / plugin.GetDescriptor().entryPoint);
+	fs::path assemblyPath(plugin.GetBaseDir());
+	assemblyPath /= plugin.GetDescriptor().GetEntryPoint();
 
 	MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, _settings.enableDebugging, status);
 	if (!assembly)
@@ -2130,17 +2168,17 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 	std::vector<std::string> methodErrors;
 
-	const auto& exportedMethods = plugin.GetDescriptor().exportedMethods;
+	std::vector<IMethod> exportedMethods = plugin.GetDescriptor().GetExportedMethods();
 	std::vector<MethodData> methods;
 	methods.reserve(exportedMethods.size());
 
 	for (const auto& method : exportedMethods) {
-		auto separated = Utils::Split(method.funcName, ".");
+		auto separated = Utils::Split(method.GetFunctionName(), ".");
 		size_t size = separated.size();
 
 		bool noNamespace = (size == 2);
 		if (size != 3 && !noNamespace) {
-			methodErrors.emplace_back(std::format("Invalid function format: '{}'. Please provide name in that format: 'Namespace.Class.Method' or 'Namespace.MyParentClass/MyNestedClass.Method' or 'Class.Method'", method.funcName));
+			methodErrors.emplace_back(std::format("Invalid function format: '{}'. Please provide name in that format: 'Namespace.Class.Method' or 'Namespace.MyParentClass/MyNestedClass.Method' or 'Class.Method'", method.GetFunctionName()));
 			continue;
 		}
 
@@ -2150,13 +2188,13 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		MonoClass* monoClass = mono_class_from_name(image, nameSpace.c_str(), className.c_str());
 		if (!monoClass) {
-			methodErrors.emplace_back(std::format("Failed to find class '{}'", method.funcName));
+			methodErrors.emplace_back(std::format("Failed to find class '{}'", method.GetFunctionName()));
 			continue;
 		}
 
 		MonoMethod* monoMethod = mono_class_get_method_from_name(monoClass, methodName.c_str(), -1);
 		if (!monoMethod) {
-			methodErrors.emplace_back(std::format("Failed to find method '{}'", method.funcName));
+			methodErrors.emplace_back(std::format("Failed to find method '{}'", method.GetFunctionName()));
 			continue;
 		}
 
@@ -2164,15 +2202,16 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 		uint32_t methodFlags = mono_method_get_flags(monoMethod, nullptr);
 		if (!(methodFlags & MONO_METHOD_ATTR_STATIC) && !monoInstance) {
-			methodErrors.emplace_back(std::format("Method '{}' is not static", method.funcName));
+			methodErrors.emplace_back(std::format("Method '{}' is not static", method.GetFunctionName()));
 			continue;
 		}
 
 		MonoMethodSignature* sig = mono_method_signature(monoMethod);
 
 		uint32_t paramCount = mono_signature_get_param_count(sig);
-		if (paramCount != method.paramTypes.size()) {
-			methodErrors.emplace_back(std::format("Method '{}' has invalid parameter count {} when it should have {}", method.funcName, method.paramTypes.size(), paramCount));
+		std::vector<IProperty> paramTypes = method.GetParamTypes();
+		if (paramCount != paramTypes.size()) {
+			methodErrors.emplace_back(std::format("Method '{}' has invalid parameter count {} when it should have {}", method.GetFunctionName(), paramTypes.size(), paramCount));
 			continue;
 		}
 
@@ -2188,18 +2227,18 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		}
 
 		if (retType == ValueType::Invalid) {
-			methodErrors.emplace_back(std::format("Return of method '{}' not supported '{}'", method.funcName, returnTypeName));
+			methodErrors.emplace_back(std::format("Return of method '{}' not supported '{}'", method.GetFunctionName(), returnTypeName));
 			continue;
 		}
 
-		ValueType methodReturnType = method.retType.type;
+		ValueType methodReturnType = method.GetReturnType().GetType();
 
 		if (methodReturnType == ValueType::Char8 && retType == ValueType::Char16) {
 			retType = ValueType::Char8;
 		}
 
 		if (retType != methodReturnType) {
-			methodErrors.emplace_back(std::format("Method '{}' has invalid return type '{}' when it should have '{}'", method.funcName, ValueUtils::ToString(methodReturnType), ValueUtils::ToString(retType)));
+			methodErrors.emplace_back(std::format("Method '{}' has invalid return type '{}' when it should have '{}'", method.GetFunctionName(), ValueUtils::ToString(methodReturnType), ValueUtils::ToString(retType)));
 			continue;
 		}
 
@@ -2220,11 +2259,11 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 			if (paramType == ValueType::Invalid) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}' not supported '{}'", i, method.funcName, paramTypeName));
+				methodErrors.emplace_back(std::format("Parameter at index '{}' of method '{}' not supported '{}'", i, method.GetFunctionName(), paramTypeName));
 				continue;
 			}
 
-			ValueType methodParamType = method.paramTypes[i].type;
+			ValueType methodParamType = paramTypes[i].GetType();
 
 			if (methodParamType == ValueType::Char8 && paramType == ValueType::Char16) {
 				paramType = ValueType::Char8;
@@ -2232,7 +2271,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 
 			if (paramType != methodParamType) {
 				methodFail = true;
-				methodErrors.emplace_back(std::format("Method '{}' has invalid param type '{}' at index {} when it should have '{}'", method.funcName, ValueUtils::ToString(methodParamType), i, ValueUtils::ToString(paramType)));
+				methodErrors.emplace_back(std::format("Method '{}' has invalid param type '{}' at index {} when it should have '{}'", method.GetFunctionName(), ValueUtils::ToString(methodParamType), i, ValueUtils::ToString(paramType)));
 				continue;
 			}
 
@@ -2245,15 +2284,15 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		auto exportMethod = std::make_unique<ExportMethod>(monoMethod, monoInstance);
 
 		Function function(_rt);
-		void* methodAddr = function.GetJitFunc(method, &InternalCall, exportMethod.get());
+		MemAddr methodAddr = function.GetJitFunc(method, &InternalCall, exportMethod.get());
 		if (!methodAddr) {
-			methodErrors.emplace_back(std::format("Method JIT generation error: ", function.GetError()));
+			methodErrors.emplace_back(std::format("Method '{}' has JIT generation error: {}", method.GetFunctionName(), function.GetError()));
 			continue;
 		}
 		_functions.emplace(exportMethod.get(), std::move(function));
 		_exportMethods.emplace_back(std::move(exportMethod));
 
-		methods.emplace_back(method.name, methodAddr);
+		methods.emplace_back(method.GetName(), methodAddr);
 	}
 
 	if (!methodErrors.empty()) {
@@ -2261,30 +2300,31 @@ LoadResult CSharpLanguageModule::OnPluginLoad(const IPlugin& plugin) {
 		for (auto it = std::next(methodErrors.begin()); it != methodErrors.end(); ++it) {
 			std::format_to(std::back_inserter(funcs), ", {}", *it);
 		}
-		return ErrorData{ std::move(funcs) };
+		return ErrorData{ funcs };
 	}
 
 	return LoadResultData{ std::move(methods) };
 }
 
-void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
+void CSharpLanguageModule::OnMethodExport(IPlugin plugin) {
 	for (const auto& [name, addr] : plugin.GetMethods()) {
-		auto funcName = std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), name);
+		auto pluginName = plugin.GetName();
+		auto funcName = std::format("{}.{}::{}", pluginName, pluginName, name);
 
 		if (_importMethods.contains(funcName)) {
 			_provider->Log(std::format(LOG_PREFIX "Method name duplicate: {}", funcName), Severity::Error);
 			continue;
 		}
 
-		for (const auto& method : plugin.GetDescriptor().exportedMethods) {
-			if (name == method.name) {
+		for (const auto& method : plugin.GetDescriptor().GetExportedMethods()) {
+			if (name == method.GetName()) {
 				if (IsMethodPrimitive(method)) {
 					mono_add_internal_call(funcName.c_str(), addr);
 				} else {
 					Function function(_rt);
-					void* methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return ValueUtils::IsBetween(type, ValueType::_HiddenParamStart, ValueType::_StructEnd); });
+					MemAddr methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return ValueUtils::IsBetween(type, ValueType::_HiddenParamStart, ValueType::_StructEnd); });
 					if (!methodAddr) {
-						_provider->Log(std::format(LOG_PREFIX "{}: {}", method.funcName, function.GetError()), Severity::Error);
+						_provider->Log(std::format(LOG_PREFIX "{}: {}", method.GetFunctionName(), function.GetError()), Severity::Error);
 						continue;
 					}
 					_functions.emplace(methodAddr, std::move(function));
@@ -2299,21 +2339,21 @@ void CSharpLanguageModule::OnMethodExport(const IPlugin& plugin) {
 	}
 }
 
-void CSharpLanguageModule::OnPluginStart(const IPlugin& plugin) {
+void CSharpLanguageModule::OnPluginStart(IPlugin plugin) {
 	ScriptInstance* script = FindScript(plugin.GetId());
 	if (script) {
 		script->InvokeOnStart();
 	}
 }
 
-void CSharpLanguageModule::OnPluginEnd(const IPlugin& plugin) {
+void CSharpLanguageModule::OnPluginEnd(IPlugin plugin) {
 	ScriptInstance* script = FindScript(plugin.GetId());
 	if (script) {
 		script->InvokeOnEnd();
 	}
 }
 
-ScriptInstance* CSharpLanguageModule::CreateScriptInstance(const IPlugin& plugin, MonoImage* image) {
+ScriptInstance* CSharpLanguageModule::CreateScriptInstance(IPlugin plugin, MonoImage* image) {
 	const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
 	int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
 
@@ -2347,7 +2387,7 @@ ScriptInstance* CSharpLanguageModule::FindScript(UniqueId id) {
 	return nullptr;
 }
 
-MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Method& method) {
+MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::IMethod method) {
 	auto it = _cachedDelegates.find(func);
 	if (it != _cachedDelegates.end()) {
 		MonoObject* object = mono_gchandle_get_target(std::get<uint32_t>(*it));
@@ -2356,11 +2396,11 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 		}
 	}
 	
-	const auto& delegateClasses = method.retType.type != ValueType::Void ? _funcClasses : _actionClasses;
+	const auto& delegateClasses = method.GetReturnType().GetType() != ValueType::Void ? _funcClasses : _actionClasses;
 
-	size_t paramCount = method.paramTypes.size();
+	size_t paramCount = method.GetParamTypes().size();
 	if (paramCount >= delegateClasses.size()) {
-		_provider->Log(std::format(LOG_PREFIX "Function '{}' has too much arguments to create delegate", method.name), Severity::Error);
+		_provider->Log(std::format(LOG_PREFIX "Function '{}' has too much arguments to create delegate", method.GetName()), Severity::Error);
 		return nullptr;
 	}
 
@@ -2371,7 +2411,7 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, const plugify::Me
 		delegate = mono_ftnptr_to_delegate(delegateClass, func);
 	} else {
 		auto* function = new plugify::Function(_rt);
-		void* methodAddr = function->GetJitFunc(method, &ExternalCall, func);
+		MemAddr methodAddr = function->GetJitFunc(method, &ExternalCall, func);
 		delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
 		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
 	}
@@ -2396,11 +2436,16 @@ template<typename T>
 MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<T>& source, MonoClass* klass) {
 	MonoArray* array = CreateArray(klass, source.size());
 	for (size_t i = 0; i < source.size(); ++i) {
-		if constexpr (std::is_same_v<T, char>) {
-			mono_array_set(array, char16_t, i, static_cast<char16_t>(source[i]));
-		} else {
-			mono_array_set(array, T, i, source[i]);
-		}
+		mono_array_set(array, T, i, source[i]);
+	}
+	return array;
+}
+
+template<>
+MonoArray* CSharpLanguageModule::CreateArrayT(const std::vector<char>& source, MonoClass* klass) {
+	MonoArray* array = CreateArray(klass, source.size());
+	for (size_t i = 0; i < source.size(); ++i) {
+		mono_array_set(array, char16_t, i, static_cast<char16_t>(source[i]));
 	}
 	return array;
 }
@@ -2514,26 +2559,28 @@ void CSharpLanguageModule::OnPrintErrorCallback(const char* message, mono_bool /
 
 /*_________________________________________________*/
 
-ScriptInstance::ScriptInstance(const IPlugin& plugin, MonoImage* image, MonoClass* klass) : _plugin{plugin}, _image{image}, _klass{klass} {
+ScriptInstance::ScriptInstance(IPlugin plugin, MonoImage* image, MonoClass* klass) : _plugin{plugin}, _image{image}, _klass{klass} {
 	_instance = g_monolm.InstantiateClass(klass);
 
 	UniqueId id = plugin.GetId();
-	const auto& desc = plugin.GetDescriptor();
-	std::vector<std::string_view> deps;
-	deps.reserve(desc.dependencies.size());
-	for (const auto& dependency : desc.dependencies) {
-		deps.emplace_back(dependency.name);
+	IPluginDescriptor desc = plugin.GetDescriptor();
+	std::vector<IPluginReferenceDescriptor> deps = desc.GetDependencies();
+
+	std::vector<std::string_view> dependencies;
+	dependencies.reserve(deps.size());
+	for (const auto& dependency : deps) {
+		dependencies.emplace_back(dependency.GetName());
 	}
 	std::array<void*, 9> args {
 			&id,
 			g_monolm.CreateString(plugin.GetName()),
 			g_monolm.CreateString(plugin.GetFriendlyName()),
-			g_monolm.CreateString(desc.description),
-			g_monolm.CreateString(desc.versionName),
-			g_monolm.CreateString(desc.createdBy),
-			g_monolm.CreateString(desc.createdByURL),
+			g_monolm.CreateString(desc.GetDescription()),
+			g_monolm.CreateString(desc.GetVersionName()),
+			g_monolm.CreateString(desc.GetCreatedBy()),
+			g_monolm.CreateString(desc.GetCreatedByURL()),
 			g_monolm.CreateString(plugin.GetBaseDir().string()),
-			g_monolm.CreateStringArray(deps),
+			g_monolm.CreateStringArray(dependencies),
 	};
 	mono_runtime_invoke(g_monolm._plugin.ctor, _instance, args.data(), nullptr);
 }

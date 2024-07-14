@@ -1,5 +1,6 @@
 #include "glue.h"
 #include "module.h"
+#include "utils.h"
 
 #include <plugify/plugify_provider.h>
 #include <plugify/plugin.h>
