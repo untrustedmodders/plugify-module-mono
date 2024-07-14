@@ -141,8 +141,8 @@ namespace monolm {
 		static void DeleteParam(const ArgumentList& args, size_t& i, plugify::ValueType type);
 		static void DeleteReturn(const ArgumentList& args, size_t& i, plugify::ValueType type);
 		static void SetReturn(plugify::PropertyRef retProp, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
-		static void SetParams(const std::vector<plugify::PropertyRef>& paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
-		static void SetReferences(const std::vector<plugify::PropertyRef>& paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
+		static void SetParams(std::span<const plugify::PropertyRef> paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
+		static void SetReferences(std::span<const plugify::PropertyRef> paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
 
 		template<typename T>
 		static void* MonoStructToArg(ArgumentList& args);

@@ -703,7 +703,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 
 	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
-	std::vector<PropertyRef> paramProps = method.GetParamTypes();
+	std::span<const PropertyRef> paramProps = method.GetParamTypes();
 
 	size_t argsCount = static_cast<size_t>(std::count_if(paramProps.begin(),paramProps.end(), [](const PropertyRef& param) {
 		return ValueUtils::IsObject(param.GetType());
@@ -1433,7 +1433,7 @@ void CSharpLanguageModule::InternalCall(MethodRef method, MemAddr data, const Pa
 
 	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
-	std::vector<PropertyRef> paramProps = method.GetParamTypes();
+	std::span<const PropertyRef> paramProps = method.GetParamTypes();
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
@@ -1463,7 +1463,7 @@ void CSharpLanguageModule::DelegateCall(MethodRef method, MemAddr data, const Pa
 
 	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
-	std::vector<PropertyRef> paramProps = method.GetParamTypes();
+	std::span<const PropertyRef> paramProps = method.GetParamTypes();
 
 	/// We not create param vector, and use Parameters* params directly if passing primitives
 	bool hasRefs = false;
@@ -1487,7 +1487,7 @@ void CSharpLanguageModule::DelegateCall(MethodRef method, MemAddr data, const Pa
 	SetReturn(retProp, p, ret, result);
 }
 
-void CSharpLanguageModule::SetParams(const std::vector<PropertyRef>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
+void CSharpLanguageModule::SetParams(std::span<const PropertyRef> paramProps, const Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args) {
 	for (uint8_t i = hasRet, j = 0; i < count; ++i, ++j) {
 		void* arg;
 		const auto& param = paramProps[j];
@@ -1699,7 +1699,7 @@ void CSharpLanguageModule::SetParams(const std::vector<PropertyRef>& paramProps,
 	}
 }
 
-void CSharpLanguageModule::SetReferences(const std::vector<PropertyRef>& paramProps, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
+void CSharpLanguageModule::SetReferences(std::span<const PropertyRef> paramProps, const Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args) {
 	if (hasRefs) {
 		for (uint8_t i = hasRet, j = 0; i < count; ++i, ++j) {
 			const auto& param = paramProps[j];
@@ -2168,7 +2168,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 
 	std::vector<std::string> methodErrors;
 
-	std::vector<MethodRef> exportedMethods = plugin.GetDescriptor().GetExportedMethods();
+	std::span<const MethodRef> exportedMethods = plugin.GetDescriptor().GetExportedMethods();
 	std::vector<MethodData> methods;
 	methods.reserve(exportedMethods.size());
 
@@ -2209,7 +2209,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 		MonoMethodSignature* sig = mono_method_signature(monoMethod);
 
 		uint32_t paramCount = mono_signature_get_param_count(sig);
-		std::vector<PropertyRef> paramTypes = method.GetParamTypes();
+		std::span<const PropertyRef> paramTypes = method.GetParamTypes();
 		if (paramCount != paramTypes.size()) {
 			methodErrors.emplace_back(std::format("Method '{}' has invalid parameter count {} when it should have {}", method.GetFunctionName(), paramTypes.size(), paramCount));
 			continue;
@@ -2559,7 +2559,7 @@ ScriptInstance::ScriptInstance(PluginRef plugin, MonoImage* image, MonoClass* kl
 
 	UniqueId id = plugin.GetId();
 	PluginDescriptorRef desc = plugin.GetDescriptor();
-	std::vector<PluginReferenceDescriptorRef> deps = desc.GetDependencies();
+	std::span<const PluginReferenceDescriptorRef> deps = desc.GetDependencies();
 
 	std::vector<std::string_view> dependencies;
 	dependencies.reserve(deps.size());
