@@ -50,23 +50,23 @@ using namespace plugify;
 template<class T>
 inline constexpr bool always_false_v = std::is_same_v<std::decay_t<T>, std::add_cv_t<std::decay_t<T>>>;
 
-void std::default_delete<DCCallVM>::operator()(DCCallVM* vm) const noexcept {
+void std::default_delete<DCCallVM>::operator()(DCCallVM* vm) const {
 	dcFree(vm);
 }
 
-void std::default_delete<MonoReferenceQueue>::operator()(MonoReferenceQueue* queue) const noexcept {
+void std::default_delete<MonoReferenceQueue>::operator()(MonoReferenceQueue* queue) const {
 	mono_gc_reference_queue_free(queue);
 }
 
-void monolm::RootDomainDeleter::operator()(MonoDomain* domain) const noexcept {
+void monolm::RootDomainDeleter::operator()(MonoDomain* domain) const {
 	mono_jit_cleanup(domain);
 }
 
-void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const noexcept {
+void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const {
 	mono_domain_unload(domain);
 }
 
-bool IsMethodPrimitive(const plugify::MethodRef& method) {
+bool IsMethodPrimitive(plugify::MethodRef method) {
 	// char8 is exception among primitive types
 
 	ValueType retType = method.GetReturnType().GetType();
@@ -136,8 +136,22 @@ void monolm::MonoArrayToVector(MonoArray* array, std::vector<std::string>& dest)
 			dest[i] = {};
 	}
 }
-ValueType MonoTypeToValueType(const char* typeName) {
-	static std::unordered_map<std::string, ValueType> valueTypeMap = {
+
+struct string_hash {
+	using is_transparent = void;
+	[[nodiscard]] size_t operator()(const char* txt) const {
+		return std::hash<std::string_view>{}(txt);
+	}
+	[[nodiscard]] size_t operator()(std::string_view txt) const {
+		return std::hash<std::string_view>{}(txt);
+	}
+	[[nodiscard]] size_t operator()(const std::string& txt) const {
+		return std::hash<std::string>{}(txt);
+	}
+};
+
+ValueType MonoTypeToValueType(std::string_view typeName) {
+	static std::unordered_map<std::string, ValueType, string_hash, std::equal_to<>> valueTypeMap = {
 			{ "System.Void", ValueType::Void },
 			{ "System.Boolean", ValueType::Bool },
 			{ "System.Char", ValueType::Char16 },
@@ -306,13 +320,8 @@ AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& 
 	return { assembly, image };
 }
 
-void LoadSystemClass(std::vector<MonoClass*>& storage, const char* name) {
-	MonoClass* klass = mono_class_from_name(mono_get_corlib(), "System", name);
-	if (klass != nullptr) storage.push_back(klass);
-}
-
-ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, const char* name, int paramCount) {
-	MonoClass* klass = mono_class_from_name(image, "Plugify", name);
+ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, std::string_view name, int paramCount) {
+	MonoClass* klass = mono_class_from_name(image, "Plugify", name.data());
 	if (!klass) {
 		errors.emplace_back(name);
 		return {};
@@ -450,43 +459,6 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 		}
 	}
 
-	/// Delegates
-	LoadSystemClass(_funcClasses, "Func`1");
-	LoadSystemClass(_funcClasses, "Func`2");
-	LoadSystemClass(_funcClasses, "Func`3");
-	LoadSystemClass(_funcClasses, "Func`4");
-	LoadSystemClass(_funcClasses, "Func`5");
-	LoadSystemClass(_funcClasses, "Func`6");
-	LoadSystemClass(_funcClasses, "Func`7");
-	LoadSystemClass(_funcClasses, "Func`8");
-	LoadSystemClass(_funcClasses, "Func`9");
-	LoadSystemClass(_funcClasses, "Func`10");
-	LoadSystemClass(_funcClasses, "Func`11");
-	LoadSystemClass(_funcClasses, "Func`12");
-	LoadSystemClass(_funcClasses, "Func`13");
-	LoadSystemClass(_funcClasses, "Func`14");
-	LoadSystemClass(_funcClasses, "Func`15");
-	LoadSystemClass(_funcClasses, "Func`16");
-	LoadSystemClass(_funcClasses, "Func`17");
-
-	LoadSystemClass(_actionClasses, "Action");
-	LoadSystemClass(_actionClasses, "Action`1");
-	LoadSystemClass(_actionClasses, "Action`2");
-	LoadSystemClass(_actionClasses, "Action`3");
-	LoadSystemClass(_actionClasses, "Action`4");
-	LoadSystemClass(_actionClasses, "Action`5");
-	LoadSystemClass(_actionClasses, "Action`6");
-	LoadSystemClass(_actionClasses, "Action`7");
-	LoadSystemClass(_actionClasses, "Action`8");
-	LoadSystemClass(_actionClasses, "Action`9");
-	LoadSystemClass(_actionClasses, "Action`10");
-	LoadSystemClass(_actionClasses, "Action`11");
-	LoadSystemClass(_actionClasses, "Action`12");
-	LoadSystemClass(_actionClasses, "Action`13");
-	LoadSystemClass(_actionClasses, "Action`14");
-	LoadSystemClass(_actionClasses, "Action`15");
-	LoadSystemClass(_actionClasses, "Action`16");
-
 	_provider->Log("Loaded dependency assemblies and classes", Severity::Debug);
 
 	_functionReferenceQueue = std::unique_ptr<MonoReferenceQueue>(mono_gc_reference_queue_new(FunctionRefQueueCallback));
@@ -506,8 +478,6 @@ void CSharpLanguageModule::Shutdown() {
 	_functionReferenceQueue.reset();
 	_cachedFunctions.clear();
 	_cachedDelegates.clear();
-	_funcClasses.clear();
-	_actionClasses.clear();
 	_importMethods.clear();
 	_exportMethods.clear();
 	_functions.clear();
@@ -2235,6 +2205,8 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 
 		if (methodReturnType == ValueType::Char8 && retType == ValueType::Char16) {
 			retType = ValueType::Char8;
+		} else if (methodReturnType == ValueType::ArrayChar8 && retType == ValueType::ArrayChar16) {
+			retType = ValueType::ArrayChar8;
 		}
 
 		if (retType != methodReturnType) {
@@ -2267,6 +2239,8 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 
 			if (methodParamType == ValueType::Char8 && paramType == ValueType::Char16) {
 				paramType = ValueType::Char8;
+			} else if (methodParamType == ValueType::ArrayChar8 && paramType == ValueType::ArrayChar16) {
+				paramType = ValueType::ArrayChar8;
 			}
 
 			if (paramType != methodParamType) {
@@ -2396,23 +2370,50 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::MethodRe
 		}
 	}
 
-	const auto& delegateClasses = method.GetReturnType().GetType() != ValueType::Void ? _funcClasses : _actionClasses;
+	// TODO@ Find better way to lookup for delegate inside scripts, probably we need more info from core
 
-	size_t paramCount = method.GetParamTypes().size();
-	if (paramCount >= delegateClasses.size()) {
-		_provider->Log(std::format(LOG_PREFIX "Function '{}' has too much arguments to create delegate", method.GetName()), Severity::Error);
+	auto delegateName = method.GetName();
+
+	MonoClass* monoClass = nullptr;
+
+	for (const auto& [_, script] : _scripts) {
+		MonoImage* image = script._image;
+
+		const MonoTableInfo* typeDefinitionsTable = mono_image_get_table_info(image, MONO_TABLE_TYPEDEF);
+		int numTypes = mono_table_info_get_rows(typeDefinitionsTable);
+
+		for (int i = 0; i < numTypes; ++i) {
+			uint32_t cols[MONO_TYPEDEF_SIZE];
+			mono_metadata_decode_row(typeDefinitionsTable, i, cols, MONO_TYPEDEF_SIZE);
+
+			const char* nameSpace = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAMESPACE]);
+			const char* className = mono_metadata_string_heap(image, cols[MONO_TYPEDEF_NAME]);
+
+			if (delegateName == className) {
+				monoClass = mono_class_from_name(image, nameSpace, className);
+				break;
+			}
+		}
+	}
+
+	if (!monoClass) {
+		_provider->Log(std::format(LOG_PREFIX "Failed to find delegate '{}'", method.GetName()), Severity::Error);
 		return nullptr;
 	}
 
-	MonoClass* delegateClass = delegateClasses[paramCount];
+	if (!mono_class_is_delegate(monoClass)) {
+		_provider->Log(std::format(LOG_PREFIX "Class '{}' is not delegate", method.GetName()), Severity::Error);
+		return nullptr;
+	}
+
 	MonoDelegate* delegate;
 
 	if (IsMethodPrimitive(method)) {
-		delegate = mono_ftnptr_to_delegate(delegateClass, func);
+		delegate = mono_ftnptr_to_delegate(monoClass, func);
 	} else {
 		auto* function = new plugify::Function(_rt);
 		MemAddr methodAddr = function->GetJitFunc(method, &ExternalCall, func);
-		delegate = mono_ftnptr_to_delegate(delegateClass, methodAddr);
+		delegate = mono_ftnptr_to_delegate(monoClass, methodAddr);
 		mono_gc_reference_queue_add(_functionReferenceQueue.get(), reinterpret_cast<MonoObject*>(delegate), reinterpret_cast<void*>(function));
 	}
 

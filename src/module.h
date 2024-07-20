@@ -28,12 +28,12 @@ extern "C" {
 
 template <>
 struct std::default_delete<DCCallVM> {
-	void operator()(DCCallVM* vm) const noexcept;
+	void operator()(DCCallVM* vm) const;
 };
 
 template <>
 struct std::default_delete<MonoReferenceQueue> {
-	void operator()(MonoReferenceQueue* queue) const noexcept;
+	void operator()(MonoReferenceQueue* queue) const;
 };
 
 namespace monolm {
@@ -60,11 +60,11 @@ namespace monolm {
 	};
 
 	struct RootDomainDeleter {
-		void operator()(MonoDomain* domain) const noexcept;
+		void operator()(MonoDomain* domain) const;
 	};
 
 	struct AppDomainDeleter {
-		void operator()(MonoDomain* domain) const noexcept;
+		void operator()(MonoDomain* domain) const;
 	};
 
 	std::string MonoStringToUTF8(MonoString* string);
@@ -174,9 +174,6 @@ namespace monolm {
 		
 		std::unique_ptr<DCCallVM> _callVirtMachine;
 		std::mutex _mutex;
-
-		std::vector<MonoClass*> _funcClasses;
-		std::vector<MonoClass*> _actionClasses;
 
 		ScriptMap _scripts;
 
