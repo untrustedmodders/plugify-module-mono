@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using cross_call_master;
 using Plugify;
 using static cross_call_master.cross_call_master;
 
@@ -96,8 +97,6 @@ namespace cross_call_worker
             Console.WriteLine("NoParamReturnDouble");
             return double.MaxValue;
         }
-
-        public delegate void NoParamReturnFunctionCallbackFunc();
 
         public static NoParamReturnFunctionCallbackFunc NoParamReturnFunction()
         {

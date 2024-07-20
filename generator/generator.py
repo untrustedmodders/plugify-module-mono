@@ -230,7 +230,7 @@ def gen_params_string(params, param_gen: ParamGen):
 def gen_delegate(prototype):
     ret_type = prototype['retType']
     return_type = convert_type(ret_type['type'], 'ref' in ret_type and ret_type['ref'] is True)
-    return (f'\tdelegate {return_type} '
+    return (f'\tpublic delegate {return_type} '
             f'{prototype["name"]}({gen_params_string(prototype["paramTypes"], ParamGen.TypesNames)});\n')
 
 

@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace cross_call_master
 {
-	delegate int NoParamReturnFunctionCallbackFunc();
+	public delegate int NoParamReturnFunctionCallbackFunc();
 
 	internal static class cross_call_master
 	{
