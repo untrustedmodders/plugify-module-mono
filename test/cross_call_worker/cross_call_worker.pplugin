@@ -1,0 +1,1222 @@
+{
+	"fileVersion": 1,
+	"version": 1,
+	"versionName": "1.0",
+	"friendlyName": "Cross-call Worker",
+	"description": "Calls test plugin. Language specific implementation",
+	"createdBy": "untrustedmodders",
+	"createdByURL": "https://github.com/untrustedmodders/",
+	"docsURL": "",
+	"downloadURL": "",
+	"updateURL": "",
+	"entryPoint": "cross_call_worker.dll",
+	"supportedPlatforms": [],
+	"languageModule": {
+		"name": "csharp-mono"
+	},
+	"dependencies": [],
+	"exportedMethods": [
+		{
+			"name": "NoParamReturnVoid",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnVoid",
+			"paramTypes": [],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "NoParamReturnBool",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnBool",
+			"paramTypes": [],
+			"retType": {
+				"type": "bool"
+			}
+		},
+		{
+			"name": "NoParamReturnChar8",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnChar8",
+			"paramTypes": [],
+			"retType": {
+				"type": "char8"
+			}
+		},
+		{
+			"name": "NoParamReturnChar16",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnChar16",
+			"paramTypes": [],
+			"retType": {
+				"type": "char16"
+			}
+		},
+		{
+			"name": "NoParamReturnInt8",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnInt8",
+			"paramTypes": [],
+			"retType": {
+				"type": "int8"
+			}
+		},
+		{
+			"name": "NoParamReturnInt16",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnInt16",
+			"paramTypes": [],
+			"retType": {
+				"type": "int16"
+			}
+		},
+		{
+			"name": "NoParamReturnInt32",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnInt32",
+			"paramTypes": [],
+			"retType": {
+				"type": "int32"
+			}
+		},
+		{
+			"name": "NoParamReturnInt64",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnInt64",
+			"paramTypes": [],
+			"retType": {
+				"type": "int64"
+			}
+		},
+		{
+			"name": "NoParamReturnUInt8",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnUInt8",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint8"
+			}
+		},
+		{
+			"name": "NoParamReturnUInt16",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnUInt16",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint16"
+			}
+		},
+		{
+			"name": "NoParamReturnUInt32",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnUInt32",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint32"
+			}
+		},
+		{
+			"name": "NoParamReturnUInt64",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnUInt64",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint64"
+			}
+		},
+		{
+			"name": "NoParamReturnPointer",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnPointer",
+			"paramTypes": [],
+			"retType": {
+				"type": "ptr64"
+			}
+		},
+		{
+			"name": "NoParamReturnFloat",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnFloat",
+			"paramTypes": [],
+			"retType": {
+				"type": "float"
+			}
+		},
+		{
+			"name": "NoParamReturnDouble",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnDouble",
+			"paramTypes": [],
+			"retType": {
+				"type": "double"
+			}
+		},
+		{
+			"name": "NoParamReturnFunction",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnFunction",
+			"paramTypes": [],
+			"retType": {
+				"type": "function",
+				"prototype": {
+					"name": "NoParamReturnFunctionFunc",
+					"paramTypes": [],
+					"retType": {
+						"type": "void"
+					}
+				}
+			}
+		},
+		{
+			"name": "NoParamReturnString",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnString",
+			"paramTypes": [],
+			"retType": {
+				"type": "string"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayBool",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayBool",
+			"paramTypes": [],
+			"retType": {
+				"type": "bool*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayChar8",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayChar8",
+			"paramTypes": [],
+			"retType": {
+				"type": "char8*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayChar16",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayChar16",
+			"paramTypes": [],
+			"retType": {
+				"type": "char16*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayInt8",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayInt8",
+			"paramTypes": [],
+			"retType": {
+				"type": "int8*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayInt16",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayInt16",
+			"paramTypes": [],
+			"retType": {
+				"type": "int16*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayInt32",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayInt32",
+			"paramTypes": [],
+			"retType": {
+				"type": "int32*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayInt64",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayInt64",
+			"paramTypes": [],
+			"retType": {
+				"type": "int64*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayUInt8",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayUInt8",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint8*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayUInt16",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayUInt16",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint16*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayUInt32",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayUInt32",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint32*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayUInt64",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayUInt64",
+			"paramTypes": [],
+			"retType": {
+				"type": "uint64*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayPointer",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayPointer",
+			"paramTypes": [],
+			"retType": {
+				"type": "ptr64*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayFloat",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayFloat",
+			"paramTypes": [],
+			"retType": {
+				"type": "float*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayDouble",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayDouble",
+			"paramTypes": [],
+			"retType": {
+				"type": "double*"
+			}
+		},
+		{
+			"name": "NoParamReturnArrayString",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnArrayString",
+			"paramTypes": [],
+			"retType": {
+				"type": "string*"
+			}
+		},
+		{
+			"name": "NoParamReturnVector2",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnVector2",
+			"paramTypes": [],
+			"retType": {
+				"type": "vec2"
+			}
+		},
+		{
+			"name": "NoParamReturnVector3",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnVector3",
+			"paramTypes": [],
+			"retType": {
+				"type": "vec3"
+			}
+		},
+		{
+			"name": "NoParamReturnVector4",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnVector4",
+			"paramTypes": [],
+			"retType": {
+				"type": "vec4"
+			}
+		},
+		{
+			"name": "NoParamReturnMatrix4x4",
+			"funcName": "cross_call_worker.ExportClass.NoParamReturnMatrix4x4",
+			"paramTypes": [],
+			"retType": {
+				"type": "mat4x4"
+			}
+		},
+		{
+			"name": "Param1",
+			"funcName": "cross_call_worker.ExportClass.Param1",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param2",
+			"funcName": "cross_call_worker.ExportClass.Param2",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param3",
+			"funcName": "cross_call_worker.ExportClass.Param3",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param4",
+			"funcName": "cross_call_worker.ExportClass.Param4",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param5",
+			"funcName": "cross_call_worker.ExportClass.Param5",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param6",
+			"funcName": "cross_call_worker.ExportClass.Param6",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": false
+				},
+				{
+					"name": "f",
+					"type": "char16",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param7",
+			"funcName": "cross_call_worker.ExportClass.Param7",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": false
+				},
+				{
+					"name": "f",
+					"type": "char16",
+					"ref": false
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param8",
+			"funcName": "cross_call_worker.ExportClass.Param8",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": false
+				},
+				{
+					"name": "f",
+					"type": "char16",
+					"ref": false
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": false
+				},
+				{
+					"name": "h",
+					"type": "float",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param9",
+			"funcName": "cross_call_worker.ExportClass.Param9",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": false
+				},
+				{
+					"name": "f",
+					"type": "char16",
+					"ref": false
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": false
+				},
+				{
+					"name": "h",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "k",
+					"type": "int16",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "Param10",
+			"funcName": "cross_call_worker.ExportClass.Param10",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": false
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": false
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": false
+				},
+				{
+					"name": "f",
+					"type": "char16",
+					"ref": false
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": false
+				},
+				{
+					"name": "h",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "k",
+					"type": "int16",
+					"ref": false
+				},
+				{
+					"name": "l",
+					"type": "ptr64",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef1",
+			"funcName": "cross_call_worker.ExportClass.ParamRef1",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef2",
+			"funcName": "cross_call_worker.ExportClass.ParamRef2",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef3",
+			"funcName": "cross_call_worker.ExportClass.ParamRef3",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef4",
+			"funcName": "cross_call_worker.ExportClass.ParamRef4",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef5",
+			"funcName": "cross_call_worker.ExportClass.ParamRef5",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef6",
+			"funcName": "cross_call_worker.ExportClass.ParamRef6",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": true
+				},
+				{
+					"name": "f",
+					"type": "char8",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef7",
+			"funcName": "cross_call_worker.ExportClass.ParamRef7",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": true
+				},
+				{
+					"name": "f",
+					"type": "char8",
+					"ref": true
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef8",
+			"funcName": "cross_call_worker.ExportClass.ParamRef8",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": true
+				},
+				{
+					"name": "f",
+					"type": "char8",
+					"ref": true
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": true
+				},
+				{
+					"name": "h",
+					"type": "char16",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef9",
+			"funcName": "cross_call_worker.ExportClass.ParamRef9",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": true
+				},
+				{
+					"name": "f",
+					"type": "char8",
+					"ref": true
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": true
+				},
+				{
+					"name": "h",
+					"type": "char16",
+					"ref": true
+				},
+				{
+					"name": "k",
+					"type": "int16",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRef10",
+			"funcName": "cross_call_worker.ExportClass.ParamRef10",
+			"paramTypes": [
+				{
+					"name": "a",
+					"type": "int32",
+					"ref": true
+				},
+				{
+					"name": "b",
+					"type": "float",
+					"ref": true
+				},
+				{
+					"name": "c",
+					"type": "double",
+					"ref": true
+				},
+				{
+					"name": "d",
+					"type": "vec4",
+					"ref": true
+				},
+				{
+					"name": "e",
+					"type": "int64*",
+					"ref": true
+				},
+				{
+					"name": "f",
+					"type": "char8",
+					"ref": true
+				},
+				{
+					"name": "g",
+					"type": "string",
+					"ref": true
+				},
+				{
+					"name": "h",
+					"type": "char16",
+					"ref": true
+				},
+				{
+					"name": "k",
+					"type": "int16",
+					"ref": true
+				},
+				{
+					"name": "l",
+					"type": "ptr64",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamRefVectors",
+			"funcName": "cross_call_worker.ExportClass.ParamRefVectors",
+			"paramTypes": [
+				{
+					"name": "p1",
+					"type": "bool*",
+					"ref": true
+				},
+				{
+					"name": "p2",
+					"type": "char8*",
+					"ref": true
+				},
+				{
+					"name": "p3",
+					"type": "char16*",
+					"ref": true
+				},
+				{
+					"name": "p4",
+					"type": "int8*",
+					"ref": true
+				},
+				{
+					"name": "p5",
+					"type": "int16*",
+					"ref": true
+				},
+				{
+					"name": "p6",
+					"type": "int32*",
+					"ref": true
+				},
+				{
+					"name": "p7",
+					"type": "int64*",
+					"ref": true
+				},
+				{
+					"name": "p8",
+					"type": "uint8*",
+					"ref": true
+				},
+				{
+					"name": "p9",
+					"type": "uint16*",
+					"ref": true
+				},
+				{
+					"name": "p10",
+					"type": "uint32*",
+					"ref": true
+				},
+				{
+					"name": "p11",
+					"type": "uint64*",
+					"ref": true
+				},
+				{
+					"name": "p12",
+					"type": "ptr64*",
+					"ref": true
+				},
+				{
+					"name": "p13",
+					"type": "float*",
+					"ref": true
+				},
+				{
+					"name": "p14",
+					"type": "double*",
+					"ref": true
+				},
+				{
+					"name": "p15",
+					"type": "string*",
+					"ref": true
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		},
+		{
+			"name": "ParamAllPrimitives",
+			"funcName": "cross_call_worker.ExportClass.ParamAllPrimitives",
+			"paramTypes": [
+				{
+					"name": "p1",
+					"type": "bool",
+					"ref": false
+				},
+				{
+					"name": "p2",
+					"type": "char8",
+					"ref": false
+				},
+				{
+					"name": "p3",
+					"type": "char16",
+					"ref": false
+				},
+				{
+					"name": "p4",
+					"type": "int8",
+					"ref": false
+				},
+				{
+					"name": "p5",
+					"type": "int16",
+					"ref": false
+				},
+				{
+					"name": "p6",
+					"type": "int32",
+					"ref": false
+				},
+				{
+					"name": "p7",
+					"type": "int64",
+					"ref": false
+				},
+				{
+					"name": "p8",
+					"type": "uint8",
+					"ref": false
+				},
+				{
+					"name": "p9",
+					"type": "uint16",
+					"ref": false
+				},
+				{
+					"name": "p10",
+					"type": "uint32",
+					"ref": false
+				},
+				{
+					"name": "p11",
+					"type": "uint64",
+					"ref": false
+				},
+				{
+					"name": "p12",
+					"type": "ptr64",
+					"ref": false
+				},
+				{
+					"name": "p13",
+					"type": "float",
+					"ref": false
+				},
+				{
+					"name": "p14",
+					"type": "double",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "int64"
+			}
+		},
+		{
+			"name": "ReverseCall",
+			"funcName": "cross_call_worker.ExportClass.ReverseCall",
+			"paramTypes": [
+				{
+					"name": "test",
+					"type": "string",
+					"ref": false
+				}
+			],
+			"retType": {
+				"type": "void"
+			}
+		}
+	]
+}
