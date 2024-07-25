@@ -2266,7 +2266,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 		_functions.emplace(exportMethod.get(), std::move(function));
 		_exportMethods.emplace_back(std::move(exportMethod));
 
-		methods.emplace_back(method.GetName(), methodAddr);
+		methods.emplace_back(method, methodAddr);
 	}
 
 	if (!methodErrors.empty()) {
@@ -2281,35 +2281,30 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 }
 
 void CSharpLanguageModule::OnMethodExport(PluginRef plugin) {
-	for (const auto& [name, addr] : plugin.GetMethods()) {
+	for (const auto& [method, addr] : plugin.GetMethods()) {
 		auto pluginName = plugin.GetName();
-		auto funcName = std::format("{}.{}::{}", pluginName, pluginName, name);
+		auto funcName = std::format("{}.{}::{}", pluginName, pluginName, method.GetName());
 
 		if (_importMethods.contains(funcName)) {
 			_provider->Log(std::format(LOG_PREFIX "Method name duplicate: {}", funcName), Severity::Error);
 			continue;
 		}
 
-		for (const auto& method : plugin.GetDescriptor().GetExportedMethods()) {
-			if (name == method.GetName()) {
-				if (IsMethodPrimitive(method)) {
-					mono_add_internal_call(funcName.c_str(), addr);
-				} else {
-					Function function(_rt);
-					MemAddr methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return ValueUtils::IsBetween(type, ValueType::_HiddenParamStart, ValueType::_StructEnd); });
-					if (!methodAddr) {
-						_provider->Log(std::format(LOG_PREFIX "{}: {}", method.GetFunctionName(), function.GetError()), Severity::Error);
-						continue;
-					}
-					_functions.emplace(methodAddr, std::move(function));
-
-					mono_add_internal_call(funcName.c_str(), methodAddr);
-				}
-
-				_importMethods.emplace(std::move(funcName)/*, ImportMethod{method, addr}*/);
-				break;
+		if (IsMethodPrimitive(method)) {
+			mono_add_internal_call(funcName.c_str(), addr);
+		} else {
+			Function function(_rt);
+			MemAddr methodAddr = function.GetJitFunc(method, &ExternalCall, addr, [](ValueType type) { return ValueUtils::IsBetween(type, ValueType::_HiddenParamStart, ValueType::_StructEnd); });
+			if (!methodAddr) {
+				_provider->Log(std::format(LOG_PREFIX "{}: {}", method.GetFunctionName(), function.GetError()), Severity::Error);
+				continue;
 			}
+			_functions.emplace(methodAddr, std::move(function));
+
+			mono_add_internal_call(funcName.c_str(), methodAddr);
 		}
+
+		_importMethods.emplace(std::move(funcName)/*, ImportMethod{method, addr}*/);
 	}
 }
 
