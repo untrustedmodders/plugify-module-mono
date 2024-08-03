@@ -2282,8 +2282,7 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 
 void CSharpLanguageModule::OnMethodExport(PluginRef plugin) {
 	for (const auto& [method, addr] : plugin.GetMethods()) {
-		auto pluginName = plugin.GetName();
-		auto funcName = std::format("{}.{}::{}", pluginName, pluginName, method.GetName());
+		auto funcName = std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), method.GetName());
 
 		if (_importMethods.contains(funcName)) {
 			_provider->Log(std::format(LOG_PREFIX "Method name duplicate: {}", funcName), Severity::Error);
@@ -2367,7 +2366,7 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::MethodRe
 
 	// TODO@ Find better way to lookup for delegate inside scripts, probably we need more info from core
 
-	auto delegateName = method.GetName();
+	const auto& delegateName = method.GetName();
 
 	MonoClass* monoClass = nullptr;
 
