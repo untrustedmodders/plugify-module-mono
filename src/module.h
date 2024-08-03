@@ -106,7 +106,7 @@ namespace monolm {
 		void OnPluginStart(plugify::PluginRef plugin) override;
 		void OnPluginEnd(plugify::PluginRef plugin) override;
 		void OnMethodExport(plugify::PluginRef plugin) override;
-		bool IsDebugBuild() override { return MONOLM_IS_DEBUG; };
+		bool IsDebugBuild() override;
 
 		const ScriptMap& GetScripts() const { return _scripts; }
 		ScriptInstance* FindScript(plugify::UniqueId id);

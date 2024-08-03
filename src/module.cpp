@@ -2280,6 +2280,10 @@ LoadResult CSharpLanguageModule::OnPluginLoad(PluginRef plugin) {
 	return LoadResultData{ std::move(methods) };
 }
 
+bool CSharpLanguageModule::IsDebugBuild() {
+	return MONOLM_IS_DEBUG;
+}
+
 void CSharpLanguageModule::OnMethodExport(PluginRef plugin) {
 	for (const auto& [method, addr] : plugin.GetMethods()) {
 		auto funcName = std::format("{}.{}::{}", plugin.GetName(), plugin.GetName(), method.GetName());
