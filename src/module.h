@@ -52,9 +52,9 @@ namespace monolm {
 
 	private:
 		plugify::PluginRef _plugin;
-		MonoImage* _image{ nullptr };
-		MonoClass* _klass{ nullptr };
-		MonoObject* _instance{ nullptr };
+		MonoImage* _image;
+		MonoClass* _klass;
+		MonoObject* _instance;
 
 		friend class CSharpLanguageModule;
 	};

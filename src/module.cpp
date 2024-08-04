@@ -410,7 +410,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	_settings = std::move(*settings);
 
 	fs::path monoPath(module.GetBaseDir());
-	monoPath /=  "mono";
+	monoPath /= "mono";
 
 	auto configPath = module.FindResource("configs/mono_config");
 
