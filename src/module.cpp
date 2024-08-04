@@ -434,7 +434,7 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	{
 		fs::path assemblyPath(module.GetBaseDir());
-		assemblyPath /= "bin/Plugify.dll";
+		assemblyPath /= "api/Plugify.dll";
 
 		_core = LoadCoreAssembly(assemblyErrors, assemblyPath, _settings.enableDebugging);
 

@@ -192,8 +192,10 @@ jobs:
 
       - name: Copy API to Builds
         run: |
-          cp -r build/api/* build/linux/bin
-          cp -r build/api/* build/windows/bin
+          mkdir -p build/linux/api
+          mkdir -p build/windows/api
+          cp -r build/api/* build/linux/api
+          cp -r build/api/* build/windows/api
 
       - name: Zip Builds
         run: |
