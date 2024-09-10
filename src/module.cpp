@@ -82,8 +82,11 @@ bool IsMethodPrimitive(plugify::MethodRef method) {
 	return true;
 }
 
-std::string monolm::MonoStringToUTF8(MonoString* string) {
-	if (string == nullptr || mono_string_length(string) == 0)
+plg::string monolm::MonoStringToUTF8(MonoString* string) {
+	if (string == nullptr)
+		return {};
+	int len = mono_string_length(string);
+	if (len == 0)
 		return {};
 	MonoError error;
 	char* utf8 = mono_string_to_utf8_checked(string, &error);
@@ -92,7 +95,7 @@ std::string monolm::MonoStringToUTF8(MonoString* string) {
 		mono_error_cleanup(&error);
 		return {};
 	}
-	std::string result(utf8);
+	plg::string result(utf8, len);
 	mono_free(utf8);
 	return result;
 }
@@ -125,7 +128,7 @@ void monolm::MonoArrayToVector(MonoArray* array, std::vector<char>& dest) {
 }
 
 template<>
-void monolm::MonoArrayToVector(MonoArray* array, std::vector<std::string>& dest) {
+void monolm::MonoArrayToVector(MonoArray* array, std::vector<plg::string>& dest) {
 	auto length = mono_array_length(array);
 	dest.resize(length);
 	for (size_t i = 0; i < length; ++i) {
@@ -267,7 +270,7 @@ ValueType MonoTypeToValueType(std::string_view typeName) {
 	return ValueType::Invalid;
 }
 
-std::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
+plg::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
 	MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
 	MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
 	MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
@@ -592,7 +595,7 @@ void* CSharpLanguageModule::MonoArrayToArg(MonoArray* source, ArgumentList& args
 }
 
 void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& args) {
-	std::string* dest;
+	plg::string* dest;
 	if (source != nullptr) {
 		MonoError error;
 		char* cStr = mono_string_to_utf8_checked(source, &error);
@@ -601,10 +604,10 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& ar
 			mono_error_cleanup(&error);
 			return {};
 		}
-		dest = new std::string(cStr);
+		dest = new plg::string(cStr);
 		mono_free(cStr);
 	} else {
-		dest = new std::string();
+		dest = new plg::string();
 	}
 	args.push_back(dest);
 	return dest;
@@ -695,7 +698,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 	switch (retType) {
 		// MonoString*
 		case ValueType::String:
-			dcArgPointer(vm, AllocateMemory<std::string>(args));
+			dcArgPointer(vm, AllocateMemory<plg::string>(args));
 			break;
 		// MonoArray*
 		case ValueType::ArrayBool:
@@ -741,7 +744,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 			dcArgPointer(vm, AllocateMemory<std::vector<double>>(args));
 			break;
 		case ValueType::ArrayString:
-			dcArgPointer(vm, AllocateMemory<std::vector<std::string>>(args));
+			dcArgPointer(vm, AllocateMemory<std::vector<plg::string>>(args));
 			break;
 		case ValueType::Vector2:
 			ag = CreateDcAggr<Vector2>();
@@ -873,7 +876,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 					dcArgPointer(vm, MonoArrayToArg<double>(*p->GetArgument<MonoArray**>(i), args));
 					break;
 				case ValueType::ArrayString:
-					dcArgPointer(vm, MonoArrayToArg<std::string>(*p->GetArgument<MonoArray**>(i), args));
+					dcArgPointer(vm, MonoArrayToArg<plg::string>(*p->GetArgument<MonoArray**>(i), args));
 					break;
 				default:
 					std::puts(LOG_PREFIX "Unsupported types!\n");
@@ -980,7 +983,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 					dcArgPointer(vm, MonoArrayToArg<double>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				case ValueType::ArrayString:
-					dcArgPointer(vm, MonoArrayToArg<std::string>(p->GetArgument<MonoArray*>(i), args));
+					dcArgPointer(vm, MonoArrayToArg<plg::string>(p->GetArgument<MonoArray*>(i), args));
 					break;
 				default:
 					std::puts(LOG_PREFIX "Unsupported types!\n");
@@ -1120,7 +1123,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 		}
 		case ValueType::String: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_monolm.CreateString(*reinterpret_cast<std::string*>(args[0])));
+			ret->SetReturnPtr(g_monolm.CreateString(*reinterpret_cast<plg::string*>(args[0])));
 			break;
 		}
 		case ValueType::ArrayBool: {
@@ -1195,7 +1198,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 		}
 		case ValueType::ArrayString: {
 			dcCallVoid(vm, addr);
-			ret->SetReturnPtr(g_monolm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[0])));
+			ret->SetReturnPtr(g_monolm.CreateStringArray(*reinterpret_cast<std::vector<plg::string>*>(args[0])));
 			break;
 		}
 		default:
@@ -1214,7 +1217,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 					if (param.IsReference()) {
 						switch (param.GetType()) {
 							case ValueType::String:
-								p->SetArgumentAt(i, g_monolm.CreateString(*reinterpret_cast<std::string*>(args[j++])));
+								p->SetArgumentAt(i, g_monolm.CreateString(*reinterpret_cast<plg::string*>(args[j++])));
 								break;
 							case ValueType::ArrayBool:
 								p->SetArgumentAt(i, g_monolm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[j++]), mono_get_byte_class()));
@@ -1259,7 +1262,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 								p->SetArgumentAt(i, g_monolm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[j++]), mono_get_double_class()));
 								break;
 							case ValueType::ArrayString:
-								p->SetArgumentAt(i, g_monolm.CreateStringArray(*reinterpret_cast<std::vector<std::string>*>(args[j++])));
+								p->SetArgumentAt(i, g_monolm.CreateStringArray(*reinterpret_cast<std::vector<plg::string>*>(args[j++])));
 								break;
 							default:
 								break;
@@ -1290,7 +1293,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 void CSharpLanguageModule::DeleteParam(const ArgumentList& args, size_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::String:
-			delete reinterpret_cast<std::string*>(args[i++]);
+			delete reinterpret_cast<plg::string*>(args[i++]);
 			break;
 		case ValueType::ArrayBool:
 			delete reinterpret_cast<std::vector<bool>*>(args[i++]);
@@ -1335,7 +1338,7 @@ void CSharpLanguageModule::DeleteParam(const ArgumentList& args, size_t& i, Valu
 			delete reinterpret_cast<std::vector<double>*>(args[i++]);
 			break;
 		case ValueType::ArrayString:
-			delete reinterpret_cast<std::vector<std::string>*>(args[i++]);
+			delete reinterpret_cast<std::vector<plg::string>*>(args[i++]);
 			break;
 		default:
 			break;
@@ -1345,7 +1348,7 @@ void CSharpLanguageModule::DeleteParam(const ArgumentList& args, size_t& i, Valu
 void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, size_t& i, ValueType type) {
 	switch (type) {
 		case ValueType::String:
-			FreeMemory<std::string>(args[i++]);
+			FreeMemory<plg::string>(args[i++]);
 			break;
 		case ValueType::ArrayBool:
 			FreeMemory<std::vector<bool>>(args[i++]);
@@ -1390,7 +1393,7 @@ void CSharpLanguageModule::DeleteReturn(const ArgumentList& args, size_t& i, Val
 			FreeMemory<std::vector<double>>(args[i++]);
 			break;
 		case ValueType::ArrayString:
-			FreeMemory<std::vector<std::string>>(args[i++]);
+			FreeMemory<std::vector<plg::string>>(args[i++]);
 			break;
 		default:
 			break;
@@ -1521,7 +1524,7 @@ void CSharpLanguageModule::SetParams(std::span<const PropertyRef> paramProps, co
 					arg = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.GetPrototype());
 					break;
 				case ValueType::String:
-					arg = new MonoString*[1]{ g_monolm.CreateString(*p->GetArgument<std::string*>(i)) };
+					arg = new MonoString*[1]{ g_monolm.CreateString(*p->GetArgument<plg::string*>(i)) };
 					break;
 				case ValueType::ArrayBool:
 					arg = new MonoArray*[1]{ g_monolm.CreateArrayT<bool>(*p->GetArgument<std::vector<bool>*>(i), mono_get_byte_class()) };
@@ -1566,7 +1569,7 @@ void CSharpLanguageModule::SetParams(std::span<const PropertyRef> paramProps, co
 					arg = new MonoArray*[1]{ g_monolm.CreateArrayT<double>(*p->GetArgument<std::vector<double>*>(i), mono_get_double_class()) };
 					break;
 				case ValueType::ArrayString:
-					arg = new MonoArray*[1]{ g_monolm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i)) };
+					arg = new MonoArray*[1]{ g_monolm.CreateStringArray(*p->GetArgument<std::vector<plg::string>*>(i)) };
 					break;
 				default:
 					std::puts(LOG_PREFIX "Unsupported types!\n");
@@ -1610,7 +1613,7 @@ void CSharpLanguageModule::SetParams(std::span<const PropertyRef> paramProps, co
 					arg = g_monolm.CreateDelegate(p->GetArgument<void*>(i), *param.GetPrototype());
 					break;
 				case ValueType::String:
-					arg = g_monolm.CreateString(*p->GetArgument<std::string*>(i));
+					arg = g_monolm.CreateString(*p->GetArgument<plg::string*>(i));
 					break;
 				case ValueType::ArrayBool:
 					arg = g_monolm.CreateArrayT<bool>(*p->GetArgument<std::vector<bool>*>(i), mono_get_byte_class());
@@ -1655,7 +1658,7 @@ void CSharpLanguageModule::SetParams(std::span<const PropertyRef> paramProps, co
 					arg = g_monolm.CreateArrayT<double>(*p->GetArgument<std::vector<double>*>(i), mono_get_double_class());
 					break;
 				case ValueType::ArrayString:
-					arg = g_monolm.CreateStringArray(*p->GetArgument<std::vector<std::string>*>(i));
+					arg = g_monolm.CreateStringArray(*p->GetArgument<std::vector<plg::string>*>(i));
 					break;
 				default:
 					std::puts(LOG_PREFIX "Unsupported types!\n");
@@ -1685,7 +1688,7 @@ void CSharpLanguageModule::SetReferences(std::span<const PropertyRef> paramProps
 					case ValueType::String: {
 						auto source = reinterpret_cast<MonoString**>(args[j]);
 						if (source != nullptr)  {
-							auto* dest = p->GetArgument<std::string*>(i);
+							auto* dest = p->GetArgument<plg::string*>(i);
 							*dest = MonoStringToUTF8(source[0]);
 						}
 						delete[] source;
@@ -1820,7 +1823,7 @@ void CSharpLanguageModule::SetReferences(std::span<const PropertyRef> paramProps
 					case ValueType::ArrayString: {
 						auto source = reinterpret_cast<MonoArray**>(args[j]);
 						if (source != nullptr) {
-							auto* dest = p->GetArgument<std::vector<std::string>*>(i);
+							auto* dest = p->GetArgument<std::vector<plg::string>*>(i);
 							MonoArrayToVector(source[0], *dest);
 						}
 						delete[] source;
@@ -1958,7 +1961,7 @@ void CSharpLanguageModule::SetReturn(PropertyRef retProp, const Parameters* p, c
 			}
 			case ValueType::String: {
 				auto* source = reinterpret_cast<MonoString*>(result);
-				auto* dest = p->GetArgument<std::string*>(0);
+				auto* dest = p->GetArgument<plg::string*>(0);
 				std::construct_at(dest, MonoStringToUTF8(source));
 				ret->SetReturnPtr(dest);
 				break;
@@ -2091,8 +2094,8 @@ void CSharpLanguageModule::SetReturn(PropertyRef retProp, const Parameters* p, c
 			}
 			case ValueType::ArrayString: {
 				auto* source = reinterpret_cast<MonoArray*>(result);
-				auto* dest = p->GetArgument<std::vector<std::string>*>(0);
-				std::vector<std::string> storage;
+				auto* dest = p->GetArgument<std::vector<plg::string>*>(0);
+				std::vector<plg::string> storage;
 				MonoArrayToVector(source, storage);
 				std::construct_at(dest, std::move(storage));
 				ret->SetReturnPtr(dest);
@@ -2469,9 +2472,9 @@ void CSharpLanguageModule::HandleException(MonoObject* exc, void* /* userData*/)
 
 	MonoClass* exceptionClass = mono_object_get_class(exc);
 
-	std::string result(LOG_PREFIX "[Exception] ");
+	plg::string result(LOG_PREFIX "[Exception] ");
 
-	std::string message = GetStringProperty("Message", exceptionClass, exc);
+	plg::string message = GetStringProperty("Message", exceptionClass, exc);
 	if (!message.empty()) {
 		std::format_to(std::back_inserter(result), " | Message: {}", message);
 	}
@@ -2481,7 +2484,7 @@ void CSharpLanguageModule::HandleException(MonoObject* exc, void* /* userData*/)
 		std::format_to(std::back_inserter(result), " | Source: {}", source);
 	}*/
 
-	std::string stackTrace = GetStringProperty("StackTrace", exceptionClass, exc);
+	plg::string stackTrace = GetStringProperty("StackTrace", exceptionClass, exc);
 	if (!stackTrace.empty()) {
 		std::format_to(std::back_inserter(result), " | StackTrace: {}", stackTrace);
 	}

@@ -29,7 +29,8 @@ bool Core_IsPluginLoaded(MonoString* name, int32_t version, bool minimum) {
 MonoString* Plugin_FindResource(int64_t id, MonoString* path) {
 	ScriptInstance* script = g_monolm.FindScript(id);
 	if (script) {
-		auto resource = script->GetPlugin().FindResource(MonoStringToUTF8(path));
+		auto str = MonoStringToUTF8(path);
+		auto resource = script->GetPlugin().FindResource(static_cast<std::string_view>(str));
 		if (resource.has_value()) {
 			return g_monolm.CreateString(resource->string());
 		}

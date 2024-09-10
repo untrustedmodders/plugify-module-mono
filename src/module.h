@@ -6,6 +6,7 @@
 #include <plugify/function.h>
 #include <plugify/language_module.h>
 #include <plugify/mem_addr.h>
+#include <plugify/string.h>
 #include <plugify/module.h>
 #include <plugify/method.h>
 #include <plugify/plugin.h>
@@ -67,7 +68,7 @@ namespace monolm {
 		void operator()(MonoDomain* domain) const;
 	};
 
-	std::string MonoStringToUTF8(MonoString* string);
+	plg::string MonoStringToUTF8(MonoString* string);
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
 
