@@ -100,14 +100,14 @@ plg::string monolm::MonoStringToUTF8(MonoString* string) {
 	return result;
 }
 
-/*std::wstring monolm::MonoStringToUTF16(MonoString* string) {
+plg::wstring monolm::MonoStringToUTF16(MonoString* string) {
 	if (string == nullptr || mono_string_length(string) == 0)
 		return {};
 	wchar_t* utf16 = mono_string_to_utf16(string);
-	std::wstring result(utf16);
+	plg::wstring result(utf16);
 	mono_free(utf16);
 	return result;
-}*/
+}
 
 template<typename T>
 void monolm::MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {
@@ -400,22 +400,22 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 	if (!(_provider = provider.lock()))
 		return ErrorData{ "Provider not exposed" };
 
- 	fs::path settingsFile("configs/mono-lang-module.json");
+#define SETTINGS_FILE "configs/mono-lang-module.json"
 
-	auto settingsPath = module.FindResource(settingsFile);
+	auto settingsPath = module.FindResource(MONOLM_NSTR("" SETTINGS_FILE));
 	if (!settingsPath.has_value())
-		return ErrorData{ std::format("File '{}' has not been found", settingsFile.string()) };
+		return ErrorData{ "File '" SETTINGS_FILE "' has not been found" };
 
 	auto json = Utils::ReadText(*settingsPath);
 	auto settings = glz::read_json<MonoSettings>(json);
 	if (!settings.has_value())
-		return ErrorData{ std::format("File '{}' has JSON parsing error: {}", settingsFile.string(), glz::format_error(settings.error(), json)) };
+		return ErrorData{ std::format("File '" SETTINGS_FILE "' has JSON parsing error: {}", glz::format_error(settings.error(), json)) };
 	_settings = std::move(*settings);
 
 	fs::path monoPath(module.GetBaseDir());
 	monoPath /= "mono";
 
-	auto configPath = module.FindResource("configs/mono_config");
+	auto configPath = module.FindResource(MONOLM_NSTR("configs/mono_config"));
 
 	if (!InitMono(monoPath, configPath))
 		return ErrorData{ "Initialization of mono failed" };
@@ -496,7 +496,7 @@ void CSharpLanguageModule::Shutdown() {
 	return OnMonoAssemblyLoad(mono_assembly_name_get_name(aname));
 }*/
 
-bool CSharpLanguageModule::InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath) {
+bool CSharpLanguageModule::InitMono(const fs::path& monoPath, std::optional<fs::path> configPath) {
 	_provider->Log(std::format("Loading mono from: {}", monoPath.string()), Severity::Debug);
 
 	mono_trace_set_print_handler(OnPrintCallback);
@@ -2431,7 +2431,14 @@ MonoDelegate* CSharpLanguageModule::CreateDelegate(void* func, plugify::MethodRe
 
 template<typename T>
 MonoString* CSharpLanguageModule::CreateString(const T& source) const {
-	return source.empty() ? mono_string_empty(_appDomain.get()) : mono_string_new(_appDomain.get(), source.data());
+	if (source.empty()) {
+		return mono_string_empty(_appDomain.get());
+	}
+	if constexpr (std::same_as<T, std::wstring_view>) {
+		return mono_string_new_utf16(_appDomain.get(), source.data(), static_cast<int32_t>(source.size()));
+	} else {
+		return mono_string_new(_appDomain.get(), source.data());
+	}
 }
 
 template<typename T>
@@ -2576,7 +2583,7 @@ ScriptInstance::ScriptInstance(PluginRef plugin, MonoImage* image, MonoClass* kl
 			g_monolm.CreateString(desc.GetVersionName()),
 			g_monolm.CreateString(desc.GetCreatedBy()),
 			g_monolm.CreateString(desc.GetCreatedByURL()),
-			g_monolm.CreateString(plugin.GetBaseDir().string()),
+			g_monolm.CreateString(plugin.GetBaseDir()),
 			g_monolm.CreateStringArray(dependencies),
 	};
 	mono_runtime_invoke(g_monolm._plugin.ctor, _instance, args.data(), nullptr);

@@ -12,8 +12,8 @@ using namespace monolm;
 #define PLUG_ADD_INTERNAL_CALL(name) mono_add_internal_call("Plugify.InternalCalls::" #name, (const void*) &(name))
 
 MonoString* Core_GetBaseDirectory() {
-	const fs::path& baseDir = g_monolm.GetProvider()->GetBaseDir();
-	return g_monolm.CreateString(baseDir.string());
+	fs::path_view baseDir = g_monolm.GetProvider()->GetBaseDir();
+	return g_monolm.CreateString(baseDir);
 }
 
 bool Core_IsModuleLoaded(MonoString* name, int32_t version, bool minimum) {
@@ -29,10 +29,14 @@ bool Core_IsPluginLoaded(MonoString* name, int32_t version, bool minimum) {
 MonoString* Plugin_FindResource(int64_t id, MonoString* path) {
 	ScriptInstance* script = g_monolm.FindScript(id);
 	if (script) {
+#if MONOLM_PLATFORM_WINDOWS
+		auto str = MonoStringToUTF16(path);
+#elif
 		auto str = MonoStringToUTF8(path);
-		auto resource = script->GetPlugin().FindResource(static_cast<std::string_view>(str));
+#endif
+		auto resource = script->GetPlugin().FindResource(str);
 		if (resource.has_value()) {
-			return g_monolm.CreateString(resource->string());
+			return g_monolm.CreateString(*resource);
 		}
 	}
 	return nullptr;

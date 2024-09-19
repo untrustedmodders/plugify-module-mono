@@ -69,6 +69,7 @@ namespace monolm {
 	};
 
 	plg::string MonoStringToUTF8(MonoString* string);
+	plg::wstring MonoStringToUTF16(MonoString* string);
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
 
@@ -125,7 +126,7 @@ namespace monolm {
 		MonoObject* InstantiateClass(MonoClass* klass) const;
 
 	private:
-		bool InitMono(const fs::path& monoPath, const std::optional<fs::path>& configPath);
+		bool InitMono(const fs::path& monoPath, std::optional<fs::path> configPath);
 		void ShutdownMono();
 
 		ScriptInstance* CreateScriptInstance(plugify::PluginRef plugin, MonoImage* image);
