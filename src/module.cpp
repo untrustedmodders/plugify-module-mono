@@ -100,6 +100,7 @@ plg::string monolm::MonoStringToUTF8(MonoString* string) {
 	return result;
 }
 
+#if MONOLM_PLATFORM_WINDOWS
 plg::wstring monolm::MonoStringToUTF16(MonoString* string) {
 	if (string == nullptr || mono_string_length(string) == 0)
 		return {};
@@ -108,6 +109,7 @@ plg::wstring monolm::MonoStringToUTF16(MonoString* string) {
 	mono_free(utf16);
 	return result;
 }
+#endif
 
 template<typename T>
 void monolm::MonoArrayToVector(MonoArray* array, std::vector<T>& dest) {

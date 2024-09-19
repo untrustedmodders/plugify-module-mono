@@ -69,7 +69,9 @@ namespace monolm {
 	};
 
 	plg::string MonoStringToUTF8(MonoString* string);
+#if MONOLM_PLATFORM_WINDOWS
 	plg::wstring MonoStringToUTF16(MonoString* string);
+#endif
 	template<typename T>
 	void MonoArrayToVector(MonoArray* array, std::vector<T>& dest);
 
