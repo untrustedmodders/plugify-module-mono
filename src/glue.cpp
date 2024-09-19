@@ -31,7 +31,7 @@ MonoString* Plugin_FindResource(int64_t id, MonoString* path) {
 	if (script) {
 #if MONOLM_PLATFORM_WINDOWS
 		auto str = MonoStringToUTF16(path);
-#elif
+#else
 		auto str = MonoStringToUTF8(path);
 #endif
 		auto resource = script->GetPlugin().FindResource(str);
