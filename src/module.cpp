@@ -19,9 +19,9 @@
 #include <plugify/plugin_reference_descriptor.h>
 #include <plugify/plugify_provider.h>
 
+#include <dyncall/dyncall.h>
 #include <cpptrace/cpptrace.hpp>
 #include <glaze/glaze.hpp>
-#include <dyncall/dyncall.h>
 
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
 MONO_API void* mono_delegate_to_ftnptr(MonoDelegate* delegate);
@@ -48,17 +48,6 @@ struct _MonoDelegate {
 using namespace monolm;
 using namespace plugify;
 
-static thread_local VirtualMachine s_vm;
-
-DCCallVM& VirtualMachine::operator()() {
-	if (_callVirtMachine == nullptr) {
-		DCCallVM* vm = dcNewCallVM(4096);
-		dcMode(vm, DC_CALL_C_DEFAULT);
-		_callVirtMachine = std::unique_ptr<DCCallVM>(vm);
-	}
-	return *_callVirtMachine;
-}
-
 template<class T>
 inline constexpr bool always_false_v = std::is_same_v<std::decay_t<T>, std::add_cv_t<std::decay_t<T>>>;
 
@@ -76,6 +65,17 @@ void monolm::RootDomainDeleter::operator()(MonoDomain* domain) const {
 
 void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const {
 	mono_domain_unload(domain);
+}
+
+static thread_local VirtualMachine s_vm;
+
+DCCallVM& VirtualMachine::operator()() {
+	if (_callVirtMachine == nullptr) {
+		DCCallVM* vm = dcNewCallVM(4096);
+		dcMode(vm, DC_CALL_C_DEFAULT);
+		_callVirtMachine = std::unique_ptr<DCCallVM>(vm);
+	}
+	return *_callVirtMachine;
 }
 
 bool IsMethodPrimitive(plugify::MethodRef method) {
