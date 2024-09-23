@@ -21,6 +21,7 @@
 
 #include <cpptrace/cpptrace.hpp>
 #include <glaze/glaze.hpp>
+#include <dyncall/dyncall.h>
 
 MONO_API MonoDelegate* mono_ftnptr_to_delegate(MonoClass* klass, void* ftn);
 MONO_API void* mono_delegate_to_ftnptr(MonoDelegate* delegate);

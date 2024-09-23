@@ -1,7 +1,6 @@
 #pragma once
 
 #include <asmjit/asmjit.h>
-#include <dyncall/dyncall.h>
 #include <module_export.h>
 #include <plugify/function.h>
 #include <plugify/language_module.h>
@@ -28,13 +27,18 @@ extern "C" {
 }
 
 template <>
-struct std::default_delete<DCCallVM> {
-	void operator()(DCCallVM* vm) const;
-};
-
-template <>
 struct std::default_delete<MonoReferenceQueue> {
 	void operator()(MonoReferenceQueue* queue) const;
+};
+
+extern "C" {
+	typedef struct DCCallVM_ DCCallVM;
+	typedef struct DCaggr_ DCaggr;
+}
+
+template <>
+struct std::default_delete<DCCallVM> {
+	void operator()(DCCallVM* vm) const;
 };
 
 namespace monolm {
