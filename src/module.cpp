@@ -47,6 +47,17 @@ struct _MonoDelegate {
 using namespace monolm;
 using namespace plugify;
 
+static thread_local VirtualMachine s_vm;
+
+DCCallVM& VirtualMachine::operator()() {
+	if (_callVirtMachine == nullptr) {
+		DCCallVM* vm = dcNewCallVM(4096);
+		dcMode(vm, DC_CALL_C_DEFAULT);
+		_callVirtMachine = std::unique_ptr<DCCallVM>(vm);
+	}
+	return *_callVirtMachine;
+}
+
 template<class T>
 inline constexpr bool always_false_v = std::is_same_v<std::decay_t<T>, std::add_cv_t<std::decay_t<T>>>;
 
@@ -468,10 +479,6 @@ InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> prov
 
 	_functionReferenceQueue = std::unique_ptr<MonoReferenceQueue>(mono_gc_reference_queue_new(FunctionRefQueueCallback));
 
-	DCCallVM* vm = dcNewCallVM(4096);
-	dcMode(vm, DC_CALL_C_DEFAULT);
-	_callVirtMachine = std::unique_ptr<DCCallVM>(vm);
-
 	_provider->Log(LOG_PREFIX "Inited!", Severity::Debug);
 
 	return InitResultData{};
@@ -487,7 +494,6 @@ void CSharpLanguageModule::Shutdown() {
 	_exportMethods.clear();
 	_functions.clear();
 	_scripts.clear();
-	_callVirtMachine.reset();
 	_rt.reset();
 
 	ShutdownMono();
@@ -674,8 +680,6 @@ void CSharpLanguageModule::CleanupFunctionCache() {
 
 // Call from C# to C++
 void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Parameters* p, uint8_t count, const ReturnValue* ret) {
-	std::scoped_lock<std::mutex> lock(g_monolm._mutex);
-
 	PropertyRef retProp = method.GetReturnType();
 	ValueType retType = retProp.GetType();
 	std::span<const PropertyRef> paramProps = method.GetParamTypes();
@@ -687,7 +691,7 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr addr, const Pa
 	ArgumentList args;
 	args.reserve(ValueUtils::IsObject(retType) ? argsCount + 1 : argsCount);
 
-	DCCallVM* vm = g_monolm._callVirtMachine.get();
+	DCCallVM* vm = &s_vm();
 	dcReset(vm);
 
 	bool hasRet = ValueUtils::IsHiddenParam(retType);

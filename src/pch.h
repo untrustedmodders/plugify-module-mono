@@ -12,7 +12,6 @@
 #include <functional>
 #include <optional>
 #include <span>
-#include <mutex>
 #include <fstream>
 
 #include <filesystem>

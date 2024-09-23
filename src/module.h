@@ -78,6 +78,12 @@ namespace monolm {
 	using ScriptMap = std::map<plugify::UniqueId, ScriptInstance>;
 	using ArgumentList = std::vector<void*>;
 
+	struct VirtualMachine {
+		DCCallVM& operator()();
+	private:
+		std::unique_ptr<DCCallVM> _callVirtMachine;
+	};
+
 	/*struct ImportMethod {
 		MethodRef method;
 		void* addr{ nullptr };
@@ -176,9 +182,6 @@ namespace monolm {
 
 		std::map<uint32_t, void*> _cachedFunctions;
 		std::map<void*, uint32_t> _cachedDelegates;
-		
-		std::unique_ptr<DCCallVM> _callVirtMachine;
-		std::mutex _mutex;
 
 		ScriptMap _scripts;
 
