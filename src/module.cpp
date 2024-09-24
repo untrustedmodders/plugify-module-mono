@@ -59,11 +59,11 @@ void std::default_delete<MonoReferenceQueue>::operator()(MonoReferenceQueue* que
 	mono_gc_reference_queue_free(queue);
 }
 
-void monolm::RootDomainDeleter::operator()(MonoDomain* domain) const {
+void RootDomainDeleter::operator()(MonoDomain* domain) const {
 	mono_jit_cleanup(domain);
 }
 
-void monolm::AppDomainDeleter::operator()(MonoDomain* domain) const {
+void AppDomainDeleter::operator()(MonoDomain* domain) const {
 	mono_domain_unload(domain);
 }
 
@@ -76,22 +76,6 @@ DCCallVM& VirtualMachine::operator()() {
 		_callVirtMachine = std::unique_ptr<DCCallVM>(vm);
 	}
 	return *_callVirtMachine;
-}
-
-bool IsMethodPrimitive(plugify::MethodRef method) {
-	// char8 is exception among primitive types
-
-	ValueType retType = method.GetReturnType().GetType();
-	if (ValueUtils::IsObject(retType) || ValueUtils::IsChar8(retType) || ValueUtils::IsFunction(retType))
-		return false;
-
-	for (const auto& param : method.GetParamTypes()) {
-		ValueType paramType = param.GetType();
-		if (ValueUtils::IsObject(paramType) || ValueUtils::IsChar8(paramType) || ValueUtils::IsFunction(paramType))
-			return false;
-	}
-
-	return true;
 }
 
 plg::string monolm::MonoStringToUTF8(MonoString* string) {
@@ -154,260 +138,278 @@ void monolm::MonoArrayToVector(MonoArray* array, std::vector<plg::string>& dest)
 	}
 }
 
-struct string_hash {
-	using is_transparent = void;
-	[[nodiscard]] size_t operator()(const char* txt) const {
-		return std::hash<std::string_view>{}(txt);
+namespace {
+	bool IsMethodPrimitive(plugify::MethodRef method) {
+		// char8 is exception among primitive types
+
+		ValueType retType = method.GetReturnType().GetType();
+		if (ValueUtils::IsObject(retType) || ValueUtils::IsChar8(retType) || ValueUtils::IsFunction(retType))
+			return false;
+
+		for (const auto& param : method.GetParamTypes()) {
+			ValueType paramType = param.GetType();
+			if (ValueUtils::IsObject(paramType) || ValueUtils::IsChar8(paramType) || ValueUtils::IsFunction(paramType))
+				return false;
+		}
+
+		return true;
 	}
-	[[nodiscard]] size_t operator()(std::string_view txt) const {
-		return std::hash<std::string_view>{}(txt);
-	}
-	[[nodiscard]] size_t operator()(const std::string& txt) const {
-		return std::hash<std::string>{}(txt);
-	}
-};
 
-ValueType MonoTypeToValueType(std::string_view typeName) {
-	static std::unordered_map<std::string, ValueType, string_hash, std::equal_to<>> valueTypeMap = {
-			{ "System.Void", ValueType::Void },
-			{ "System.Boolean", ValueType::Bool },
-			{ "System.Char", ValueType::Char16 },
-			{ "System.SByte", ValueType::Int8 },
-			{ "System.Int16", ValueType::Int16 },
-			{ "System.Int32", ValueType::Int32 },
-			{ "System.Int64", ValueType::Int64 },
-			{ "System.Byte", ValueType::UInt8 },
-			{ "System.UInt16", ValueType::UInt16 },
-			{ "System.UInt32", ValueType::UInt32 },
-			{ "System.UInt64", ValueType::UInt64 },
-			{ "System.IntPtr", ValueType::Pointer },
-			{ "System.UIntPtr", ValueType::Pointer },
-			{ "System.Single", ValueType::Float },
-			{ "System.Double", ValueType::Double },
-			{ "System.String", ValueType::String },
-			{ "System.Boolean[]", ValueType::ArrayBool },
-			{ "System.Char[]", ValueType::ArrayChar16 },
-			{ "System.SByte[]", ValueType::ArrayInt8 },
-			{ "System.Int16[]", ValueType::ArrayInt16 },
-			{ "System.Int32[]", ValueType::ArrayInt32 },
-			{ "System.Int64[]", ValueType::ArrayInt64 },
-			{ "System.Byte[]", ValueType::ArrayUInt8 },
-			{ "System.UInt16[]", ValueType::ArrayUInt16 },
-			{ "System.UInt32[]", ValueType::ArrayUInt32 },
-			{ "System.UInt64[]", ValueType::ArrayUInt64 },
-			{ "System.IntPtr[]", ValueType::ArrayPointer },
-			{ "System.UIntPtr[]", ValueType::ArrayPointer },
-			{ "System.Single[]", ValueType::ArrayFloat },
-			{ "System.Double[]", ValueType::ArrayDouble },
-			{ "System.String[]", ValueType::ArrayString },
-
-			{ "System.Boolean&", ValueType::Bool },
-			{ "System.Char&", ValueType::Char16 },
-			{ "System.SByte&", ValueType::Int8 },
-			{ "System.Int16&", ValueType::Int16 },
-			{ "System.Int32&", ValueType::Int32 },
-			{ "System.Int64&", ValueType::Int64 },
-			{ "System.Byte&", ValueType::UInt8 },
-			{ "System.UInt16&", ValueType::UInt16 },
-			{ "System.UInt32&", ValueType::UInt32 },
-			{ "System.UInt64&", ValueType::UInt64 },
-			{ "System.IntPtr&", ValueType::Pointer },
-			{ "System.UIntPtr&", ValueType::Pointer },
-			{ "System.Single&", ValueType::Float },
-			{ "System.Double&", ValueType::Double },
-			{ "System.String&", ValueType::String },
-			{ "System.Boolean[]&", ValueType::ArrayBool },
-			{ "System.Char[]&", ValueType::ArrayChar16 },
-			{ "System.SByte[]&", ValueType::ArrayInt8 },
-			{ "System.Int16[]&", ValueType::ArrayInt16 },
-			{ "System.Int32[]&", ValueType::ArrayInt32 },
-			{ "System.Int64[]&", ValueType::ArrayInt64 },
-			{ "System.Byte[]&", ValueType::ArrayUInt8 },
-			{ "System.UInt16[]&", ValueType::ArrayUInt16 },
-			{ "System.UInt32[]&", ValueType::ArrayUInt32 },
-			{ "System.UInt64[]&", ValueType::ArrayUInt64 },
-			{ "System.IntPtr[]&", ValueType::ArrayPointer },
-			{ "System.UIntPtr[]&", ValueType::ArrayPointer },
-			{ "System.Single[]&", ValueType::ArrayFloat },
-			{ "System.Double[]&", ValueType::ArrayDouble },
-			{ "System.String[]&", ValueType::ArrayString },
-
-			{ "System.Delegate", ValueType::Function },
-			{ "System.Func`1", ValueType::Function },
-			{ "System.Func`2", ValueType::Function },
-			{ "System.Func`3", ValueType::Function },
-			{ "System.Func`4", ValueType::Function },
-			{ "System.Func`5", ValueType::Function },
-			{ "System.Func`6", ValueType::Function },
-			{ "System.Func`7", ValueType::Function },
-			{ "System.Func`8", ValueType::Function },
-			{ "System.Func`9", ValueType::Function },
-			{ "System.Func`10", ValueType::Function },
-			{ "System.Func`11", ValueType::Function },
-			{ "System.Func`12", ValueType::Function },
-			{ "System.Func`13", ValueType::Function },
-			{ "System.Func`14", ValueType::Function },
-			{ "System.Func`15", ValueType::Function },
-			{ "System.Func`16", ValueType::Function },
-			{ "System.Func`17", ValueType::Function },
-			{ "System.Action", ValueType::Function },
-			{ "System.Action`1", ValueType::Function },
-			{ "System.Action`2", ValueType::Function },
-			{ "System.Action`3", ValueType::Function },
-			{ "System.Action`4", ValueType::Function },
-			{ "System.Action`5", ValueType::Function },
-			{ "System.Action`6", ValueType::Function },
-			{ "System.Action`7", ValueType::Function },
-			{ "System.Action`8", ValueType::Function },
-			{ "System.Action`9", ValueType::Function },
-			{ "System.Action`10", ValueType::Function },
-			{ "System.Action`11", ValueType::Function },
-			{ "System.Action`12", ValueType::Function },
-			{ "System.Action`13", ValueType::Function },
-			{ "System.Action`14", ValueType::Function },
-			{ "System.Action`15", ValueType::Function },
-			{ "System.Action`16", ValueType::Function },
-
-			{ "System.Numerics.Vector2", ValueType::Vector2 },
-			{ "System.Numerics.Vector3", ValueType::Vector3 },
-			{ "System.Numerics.Vector4", ValueType::Vector4 },
-			{ "System.Numerics.Matrix4x4", ValueType::Matrix4x4 },
-
-			{ "System.Numerics.Vector2&", ValueType::Vector2 },
-			{ "System.Numerics.Vector3&", ValueType::Vector3 },
-			{ "System.Numerics.Vector4&", ValueType::Vector4 },
-			{ "System.Numerics.Matrix4x4&", ValueType::Matrix4x4 },
+	struct string_hash {
+		using is_transparent = void;
+		[[nodiscard]] size_t operator()(const char* txt) const {
+			return std::hash<std::string_view>{}(txt);
+		}
+		[[nodiscard]] size_t operator()(std::string_view txt) const {
+			return std::hash<std::string_view>{}(txt);
+		}
+		[[nodiscard]] size_t operator()(const std::string& txt) const {
+			return std::hash<std::string>{}(txt);
+		}
 	};
-	auto it = valueTypeMap.find(typeName);
-	if (it != valueTypeMap.end())
-		return std::get<ValueType>(*it);
-	return ValueType::Invalid;
-}
 
-plg::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
-	MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
-	MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
-	MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
-	return MonoStringToUTF8(messageString);
-}
+	ValueType MonoTypeToValueType(std::string_view typeName) {
+		static std::unordered_map<std::string, ValueType, string_hash, std::equal_to<>> valueTypeMap = {
+				{ "System.Void", ValueType::Void },
+				{ "System.Boolean", ValueType::Bool },
+				{ "System.Char", ValueType::Char16 },
+				{ "System.SByte", ValueType::Int8 },
+				{ "System.Int16", ValueType::Int16 },
+				{ "System.Int32", ValueType::Int32 },
+				{ "System.Int64", ValueType::Int64 },
+				{ "System.Byte", ValueType::UInt8 },
+				{ "System.UInt16", ValueType::UInt16 },
+				{ "System.UInt32", ValueType::UInt32 },
+				{ "System.UInt64", ValueType::UInt64 },
+				{ "System.IntPtr", ValueType::Pointer },
+				{ "System.UIntPtr", ValueType::Pointer },
+				{ "System.Single", ValueType::Float },
+				{ "System.Double", ValueType::Double },
+				{ "System.String", ValueType::String },
+				{ "System.Boolean[]", ValueType::ArrayBool },
+				{ "System.Char[]", ValueType::ArrayChar16 },
+				{ "System.SByte[]", ValueType::ArrayInt8 },
+				{ "System.Int16[]", ValueType::ArrayInt16 },
+				{ "System.Int32[]", ValueType::ArrayInt32 },
+				{ "System.Int64[]", ValueType::ArrayInt64 },
+				{ "System.Byte[]", ValueType::ArrayUInt8 },
+				{ "System.UInt16[]", ValueType::ArrayUInt16 },
+				{ "System.UInt32[]", ValueType::ArrayUInt32 },
+				{ "System.UInt64[]", ValueType::ArrayUInt64 },
+				{ "System.IntPtr[]", ValueType::ArrayPointer },
+				{ "System.UIntPtr[]", ValueType::ArrayPointer },
+				{ "System.Single[]", ValueType::ArrayFloat },
+				{ "System.Double[]", ValueType::ArrayDouble },
+				{ "System.String[]", ValueType::ArrayString },
 
-MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
-	auto buffer = Utils::ReadBytes<char>(assemblyPath);
-	MonoImage* image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
+				{ "System.Boolean&", ValueType::Bool },
+				{ "System.Char&", ValueType::Char16 },
+				{ "System.SByte&", ValueType::Int8 },
+				{ "System.Int16&", ValueType::Int16 },
+				{ "System.Int32&", ValueType::Int32 },
+				{ "System.Int64&", ValueType::Int64 },
+				{ "System.Byte&", ValueType::UInt8 },
+				{ "System.UInt16&", ValueType::UInt16 },
+				{ "System.UInt32&", ValueType::UInt32 },
+				{ "System.UInt64&", ValueType::UInt64 },
+				{ "System.IntPtr&", ValueType::Pointer },
+				{ "System.UIntPtr&", ValueType::Pointer },
+				{ "System.Single&", ValueType::Float },
+				{ "System.Double&", ValueType::Double },
+				{ "System.String&", ValueType::String },
+				{ "System.Boolean[]&", ValueType::ArrayBool },
+				{ "System.Char[]&", ValueType::ArrayChar16 },
+				{ "System.SByte[]&", ValueType::ArrayInt8 },
+				{ "System.Int16[]&", ValueType::ArrayInt16 },
+				{ "System.Int32[]&", ValueType::ArrayInt32 },
+				{ "System.Int64[]&", ValueType::ArrayInt64 },
+				{ "System.Byte[]&", ValueType::ArrayUInt8 },
+				{ "System.UInt16[]&", ValueType::ArrayUInt16 },
+				{ "System.UInt32[]&", ValueType::ArrayUInt32 },
+				{ "System.UInt64[]&", ValueType::ArrayUInt64 },
+				{ "System.IntPtr[]&", ValueType::ArrayPointer },
+				{ "System.UIntPtr[]&", ValueType::ArrayPointer },
+				{ "System.Single[]&", ValueType::ArrayFloat },
+				{ "System.Double[]&", ValueType::ArrayDouble },
+				{ "System.String[]&", ValueType::ArrayString },
 
-	if (status != MONO_IMAGE_OK)
+				{ "System.Delegate", ValueType::Function },
+				{ "System.Func`1", ValueType::Function },
+				{ "System.Func`2", ValueType::Function },
+				{ "System.Func`3", ValueType::Function },
+				{ "System.Func`4", ValueType::Function },
+				{ "System.Func`5", ValueType::Function },
+				{ "System.Func`6", ValueType::Function },
+				{ "System.Func`7", ValueType::Function },
+				{ "System.Func`8", ValueType::Function },
+				{ "System.Func`9", ValueType::Function },
+				{ "System.Func`10", ValueType::Function },
+				{ "System.Func`11", ValueType::Function },
+				{ "System.Func`12", ValueType::Function },
+				{ "System.Func`13", ValueType::Function },
+				{ "System.Func`14", ValueType::Function },
+				{ "System.Func`15", ValueType::Function },
+				{ "System.Func`16", ValueType::Function },
+				{ "System.Func`17", ValueType::Function },
+				{ "System.Action", ValueType::Function },
+				{ "System.Action`1", ValueType::Function },
+				{ "System.Action`2", ValueType::Function },
+				{ "System.Action`3", ValueType::Function },
+				{ "System.Action`4", ValueType::Function },
+				{ "System.Action`5", ValueType::Function },
+				{ "System.Action`6", ValueType::Function },
+				{ "System.Action`7", ValueType::Function },
+				{ "System.Action`8", ValueType::Function },
+				{ "System.Action`9", ValueType::Function },
+				{ "System.Action`10", ValueType::Function },
+				{ "System.Action`11", ValueType::Function },
+				{ "System.Action`12", ValueType::Function },
+				{ "System.Action`13", ValueType::Function },
+				{ "System.Action`14", ValueType::Function },
+				{ "System.Action`15", ValueType::Function },
+				{ "System.Action`16", ValueType::Function },
+
+				{ "System.Numerics.Vector2", ValueType::Vector2 },
+				{ "System.Numerics.Vector3", ValueType::Vector3 },
+				{ "System.Numerics.Vector4", ValueType::Vector4 },
+				{ "System.Numerics.Matrix4x4", ValueType::Matrix4x4 },
+
+				{ "System.Numerics.Vector2&", ValueType::Vector2 },
+				{ "System.Numerics.Vector3&", ValueType::Vector3 },
+				{ "System.Numerics.Vector4&", ValueType::Vector4 },
+				{ "System.Numerics.Matrix4x4&", ValueType::Matrix4x4 },
+		};
+		auto it = valueTypeMap.find(typeName);
+		if (it != valueTypeMap.end())
+			return std::get<ValueType>(*it);
+		return ValueType::Invalid;
+	}
+
+	plg::string GetStringProperty(const char* propertyName, MonoClass* classType, MonoObject* classObject) {
+		MonoProperty* messageProperty = mono_class_get_property_from_name(classType, propertyName);
+		MonoMethod* messageGetter = mono_property_get_get_method(messageProperty);
+		MonoString* messageString = reinterpret_cast<MonoString*>(mono_runtime_invoke(messageGetter, classObject, nullptr, nullptr));
+		return MonoStringToUTF8(messageString);
+	}
+
+	MonoAssembly* LoadMonoAssembly(const fs::path& assemblyPath, bool loadPDB, MonoImageOpenStatus& status) {
+		auto buffer = Utils::ReadBytes<char>(assemblyPath);
+		MonoImage* image = mono_image_open_from_data_full(buffer.data(), static_cast<uint32_t>(buffer.size()), 1, &status, 0);
+
+		if (status != MONO_IMAGE_OK)
+			return nullptr;
+
+		if (loadPDB) {
+			fs::path pdbPath(assemblyPath);
+			pdbPath.replace_extension(".pdb");
+
+			auto bytes = Utils::ReadBytes<mono_byte>(pdbPath);
+			mono_debug_open_image_from_memory(image, bytes.data(), static_cast<int>(bytes.size()));
+
+			// If pdf not load ?
+		}
+		MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
+		mono_image_close(image);
+		return assembly;
+	}
+
+	AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& assemblyPath, bool loadPDB) {
+		std::error_code error;
+
+		if (!fs::exists(assemblyPath, error)) {
+			errors.emplace_back(assemblyPath.string());
+			return {};
+		}
+
+		MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
+
+		MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, loadPDB, status);
+		if (!assembly) {
+			errors.emplace_back(std::format("{} ({})", assemblyPath.filename().string(), mono_image_strerror(status)));
+			return {};
+		}
+
+		MonoImage* image = mono_assembly_get_image(assembly);
+		if (!image) {
+			errors.emplace_back(std::format("{}::image", assemblyPath.filename().string()));
+			return {};
+		}
+
+		return { assembly, image };
+	}
+
+	ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, std::string_view name, int paramCount) {
+		MonoClass* klass = mono_class_from_name(image, "Plugify", name.data());
+		if (!klass) {
+			errors.emplace_back(name);
+			return {};
+		}
+		MonoMethod* ctor = mono_class_get_method_from_name(klass, ".ctor", paramCount);
+		if (!ctor) {
+			errors.emplace_back(std::format("{}::ctor", name));
+			return {};
+		}
+		return { klass, ctor };
+	}
+
+	template<typename T>
+	void* AllocateMemory(ArgumentList& args) {
+		void* ptr = malloc(sizeof(T));
+		args.push_back(ptr);
+		return ptr;
+	}
+
+	template<typename T>
+	void FreeMemory(void* ptr) {
+		reinterpret_cast<T*>(ptr)->~T();
+		free(ptr);
+	}
+
+	template<typename T>
+	DCaggr* CreateDcAggr() {
+		static_assert(always_false_v<T>, "CreateDcAggr specialization required");
 		return nullptr;
-
-	if (loadPDB) {
-		fs::path pdbPath(assemblyPath);
-		pdbPath.replace_extension(".pdb");
-
-		auto bytes = Utils::ReadBytes<mono_byte>(pdbPath);
-		mono_debug_open_image_from_memory(image, bytes.data(), static_cast<int>(bytes.size()));
-
-		// If pdf not load ?
-	}
-	MonoAssembly* assembly = mono_assembly_load_from_full(image, assemblyPath.string().c_str(), &status, 0);
-	mono_image_close(image);
-	return assembly;
-}
-
-AssemblyInfo LoadCoreAssembly(std::vector<std::string>& errors, const fs::path& assemblyPath, bool loadPDB) {
-	std::error_code error;
-
-	if (!fs::exists(assemblyPath, error)) {
-		errors.emplace_back(assemblyPath.string());
-		return {};
 	}
 
-	MonoImageOpenStatus status = MONO_IMAGE_IMAGE_INVALID;
-
-	MonoAssembly* assembly = LoadMonoAssembly(assemblyPath, loadPDB, status);
-	if (!assembly) {
-		errors.emplace_back(std::format("{} ({})", assemblyPath.filename().string(), mono_image_strerror(status)));
-		return {};
+	template<>
+	DCaggr* CreateDcAggr<Vector2>() {
+		DCaggr* ag = dcNewAggr(2, sizeof(Vector2));
+		for (size_t i = 0; i < 2; ++i)
+			dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+		dcCloseAggr(ag);
+		return ag;
 	}
 
-	MonoImage* image = mono_assembly_get_image(assembly);
-	if (!image) {
-		errors.emplace_back(std::format("{}::image", assemblyPath.filename().string()));
-		return {};
+	template<>
+	DCaggr* CreateDcAggr<Vector3>() {
+		DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
+		for (size_t i = 0; i < 3; ++i)
+			dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+		dcCloseAggr(ag);
+		return ag;
 	}
 
-	return { assembly, image };
-}
-
-ClassInfo LoadCoreClass(std::vector<std::string>& errors, MonoImage* image, std::string_view name, int paramCount) {
-	MonoClass* klass = mono_class_from_name(image, "Plugify", name.data());
-	if (!klass) {
-		errors.emplace_back(name);
-		return {};
+	template<>
+	DCaggr* CreateDcAggr<Vector4>() {
+		DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
+		for (size_t i = 0; i < 4; ++i)
+			dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+		dcCloseAggr(ag);
+		return ag;
 	}
-	MonoMethod* ctor = mono_class_get_method_from_name(klass, ".ctor", paramCount);
-	if (!ctor) {
-		errors.emplace_back(std::format("{}::ctor", name));
-		return {};
+
+	template<>
+	DCaggr* CreateDcAggr<Matrix4x4>() {
+		DCaggr* ag = dcNewAggr(16, sizeof(Matrix4x4));
+		for (size_t i = 0; i < 16; ++i)
+			dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
+		dcCloseAggr(ag);
+		return ag;
 	}
-	return { klass, ctor };
-}
 
-template<typename T>
-void* AllocateMemory(ArgumentList& args) {
-	void* ptr = malloc(sizeof(T));
-	args.push_back(ptr);
-	return ptr;
-}
-
-template<typename T>
-void FreeMemory(void* ptr) {
-	reinterpret_cast<T*>(ptr)->~T();
-	free(ptr);
-}
-
-template<typename T>
-DCaggr* CreateDcAggr() {
-	static_assert(always_false_v<T>, "CreateDcAggr specialization required");
-	return nullptr;
-}
-
-template<>
-DCaggr* CreateDcAggr<Vector2>() {
-	DCaggr* ag = dcNewAggr(2, sizeof(Vector2));
-	for (size_t i = 0; i < 2; ++i)
-		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-	dcCloseAggr(ag);
-	return ag;
-}
-
-template<>
-DCaggr* CreateDcAggr<Vector3>() {
-	DCaggr* ag = dcNewAggr(3, sizeof(Vector3));
-	for (size_t i = 0; i < 3; ++i)
-		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-	dcCloseAggr(ag);
-	return ag;
-}
-
-template<>
-DCaggr* CreateDcAggr<Vector4>() {
-	DCaggr* ag = dcNewAggr(4, sizeof(Vector4));
-	for (size_t i = 0; i < 4; ++i)
-		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-	dcCloseAggr(ag);
-	return ag;
-}
-
-template<>
-DCaggr* CreateDcAggr<Matrix4x4>() {
-	DCaggr* ag = dcNewAggr(16, sizeof(Matrix4x4));
-	for (size_t i = 0; i < 16; ++i)
-		dcAggrField(ag, DC_SIGCHAR_FLOAT, static_cast<int>(sizeof(float) * i), 1);
-	dcCloseAggr(ag);
-	return ag;
-}
-
-void FunctionRefQueueCallback(void* function) {
-	delete reinterpret_cast<Function*>(function);
+	void FunctionRefQueueCallback(void* function) {
+		delete reinterpret_cast<Function*>(function);
+	}
 }
 
 InitResult CSharpLanguageModule::Initialize(std::weak_ptr<IPlugifyProvider> provider, ModuleRef module) {
@@ -622,7 +624,7 @@ void* CSharpLanguageModule::MonoStringToArg(MonoString* source, ArgumentList& ar
 	return dest;
 }
 
-void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, plugify::MethodRef method) {
+void* CSharpLanguageModule::MonoDelegateToArg(MonoDelegate* source, MethodRef method) {
 	if (source == nullptr) {
 		_provider->Log(LOG_PREFIX "Delegate is null", Severity::Warning);
 
