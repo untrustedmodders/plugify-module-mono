@@ -952,6 +952,8 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr data, const Ji
 		hasRefs |= param.IsReference();
 	}
 
+	func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
+
 	switch (retType) {
 		case ValueType::Void:
 		case ValueType::Bool:
@@ -972,90 +974,72 @@ void CSharpLanguageModule::ExternalCall(MethodRef method, MemAddr data, const Ji
 		case ValueType::Vector3:
 		case ValueType::Vector4:
 		case ValueType::Matrix4x4:
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			break;
 		case ValueType::Function: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateDelegate(ret->GetReturn<void*>(), *retProp.GetPrototype()));
 			break;
 		}
 		case ValueType::String: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateString(*reinterpret_cast<plg::string*>(args[0])));
 			break;
 		}
 		case ValueType::ArrayBool: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<bool>(*reinterpret_cast<std::vector<bool>*>(args[0]), mono_get_byte_class()));
 			break;
 		}
 		case ValueType::ArrayChar8: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<char>(*reinterpret_cast<std::vector<char>*>(args[0]), mono_get_char_class()));
 			break;
 		}
 		case ValueType::ArrayChar16: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<char16_t>(*reinterpret_cast<std::vector<char16_t>*>(args[0]), mono_get_char_class()));
 			break;
 		}
 		case ValueType::ArrayInt8: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<int8_t>(*reinterpret_cast<std::vector<int8_t>*>(args[0]), mono_get_sbyte_class()));
 			break;
 		}
 		case ValueType::ArrayInt16: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<int16_t>(*reinterpret_cast<std::vector<int16_t>*>(args[0]), mono_get_int16_class()));
 			break;
 		}
 		case ValueType::ArrayInt32: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<int32_t>(*reinterpret_cast<std::vector<int32_t>*>(args[0]), mono_get_int32_class()));
 			break;
 		}
 		case ValueType::ArrayInt64: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<int64_t>(*reinterpret_cast<std::vector<int64_t>*>(args[0]), mono_get_int64_class()));
 			break;
 		}
 		case ValueType::ArrayUInt8: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<uint8_t>(*reinterpret_cast<std::vector<uint8_t>*>(args[0]), mono_get_byte_class()));
 			break;
 		}
 		case ValueType::ArrayUInt16: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<uint16_t>(*reinterpret_cast<std::vector<uint16_t>*>(args[0]), mono_get_uint16_class()));
 			break;
 		}
 		case ValueType::ArrayUInt32: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<uint32_t>(*reinterpret_cast<std::vector<uint32_t>*>(args[0]), mono_get_uint32_class()));
 			break;
 		}
 		case ValueType::ArrayUInt64: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<uint64_t>(*reinterpret_cast<std::vector<uint64_t>*>(args[0]), mono_get_uint64_class()));
 			break;
 		}
 		case ValueType::ArrayPointer: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<uintptr_t>(*reinterpret_cast<std::vector<uintptr_t>*>(args[0]), mono_get_intptr_class()));
 			break;
 		}
 		case ValueType::ArrayFloat: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<float>(*reinterpret_cast<std::vector<float>*>(args[0]), mono_get_single_class()));
 			break;
 		}
 		case ValueType::ArrayDouble: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateArrayT<double>(*reinterpret_cast<std::vector<double>*>(args[0]), mono_get_double_class()));
 			break;
 		}
 		case ValueType::ArrayString: {
-			func(parameters.GetDataPtr(), reinterpret_cast<const JitCall::Return*>(ret));
 			ret->SetReturn(g_monolm.CreateStringArray(*reinterpret_cast<std::vector<plg::string>*>(args[0])));
 			break;
 		}
