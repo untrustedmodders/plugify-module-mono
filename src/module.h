@@ -2,7 +2,8 @@
 
 #include <asmjit/asmjit.h>
 #include <module_export.h>
-#include <plugify/function.h>
+#include <plugify/jit/callback.h>
+#include <plugify/jit/call.h>
 #include <plugify/language_module.h>
 #include <plugify/mem_addr.h>
 #include <plugify/string.h>
@@ -29,16 +30,6 @@ extern "C" {
 template <>
 struct std::default_delete<MonoReferenceQueue> {
 	void operator()(MonoReferenceQueue* queue) const;
-};
-
-extern "C" {
-	typedef struct DCCallVM_ DCCallVM;
-	typedef struct DCaggr_ DCaggr;
-}
-
-template <>
-struct std::default_delete<DCCallVM> {
-	void operator()(DCCallVM* vm) const;
 };
 
 namespace monolm {
@@ -81,12 +72,7 @@ namespace monolm {
 
 	using ScriptMap = std::map<plugify::UniqueId, ScriptInstance>;
 	using ArgumentList = std::vector<void*>;
-
-	struct VirtualMachine {
-		DCCallVM& operator()();
-	private:
-		std::unique_ptr<DCCallVM> _callVirtMachine;
-	};
+	using Function = std::pair<plugify::JitCallback, plugify::JitCall>;
 
 	/*struct ImportMethod {
 		MethodRef method;
@@ -149,15 +135,15 @@ namespace monolm {
 		static void OnPrintCallback(const char* message, mono_bool isStdout);
 		static void OnPrintErrorCallback(const char* message, mono_bool isStdout);
 
-		static void ExternalCall(plugify::MethodRef method, plugify::MemAddr addr, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
-		static void InternalCall(plugify::MethodRef method, plugify::MemAddr data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
-		static void DelegateCall(plugify::MethodRef method, plugify::MemAddr data, const plugify::Parameters* params, uint8_t count, const plugify::ReturnValue* ret);
+		static void ExternalCall(plugify::MethodRef method, plugify::MemAddr addr, const plugify::JitCallback::Parameters* params, uint8_t count, const plugify::JitCallback::ReturnValue* ret);
+		static void InternalCall(plugify::MethodRef method, plugify::MemAddr data, const plugify::JitCallback::Parameters* params, uint8_t count, const plugify::JitCallback::ReturnValue* ret);
+		static void DelegateCall(plugify::MethodRef method, plugify::MemAddr data, const plugify::JitCallback::Parameters* params, uint8_t count, const plugify::JitCallback::ReturnValue* ret);
 
 		static void DeleteParam(const ArgumentList& args, size_t& i, plugify::ValueType type);
 		static void DeleteReturn(const ArgumentList& args, size_t& i, plugify::ValueType type);
-		static void SetReturn(plugify::PropertyRef retProp, const plugify::Parameters* p, const plugify::ReturnValue* ret, MonoObject* result);
-		static void SetParams(std::span<const plugify::PropertyRef> paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
-		static void SetReferences(std::span<const plugify::PropertyRef> paramProps, const plugify::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
+		static void SetReturn(plugify::PropertyRef retProp, const plugify::JitCallback::Parameters* p, const plugify::JitCallback::ReturnValue* ret, MonoObject* result);
+		static void SetParams(std::span<const plugify::PropertyRef> paramProps, const plugify::JitCallback::Parameters* p, uint8_t count, bool hasRet, bool& hasRefs, ArgumentList& args);
+		static void SetReferences(std::span<const plugify::PropertyRef> paramProps, const plugify::JitCallback::Parameters* p, uint8_t count, bool hasRet, bool hasRefs, const ArgumentList& args);
 
 		template<typename T>
 		static void* MonoStructToArg(ArgumentList& args);
@@ -171,7 +157,8 @@ namespace monolm {
 	private:
 		std::unique_ptr<MonoDomain, RootDomainDeleter> _rootDomain;
 		std::unique_ptr<MonoDomain, AppDomainDeleter> _appDomain;
-		std::unique_ptr<MonoReferenceQueue> _functionReferenceQueue;
+		std::unique_ptr<MonoReferenceQueue> _callbackReferenceQueue;
+		std::unique_ptr<MonoReferenceQueue> _callReferenceQueue;
 
 		AssemblyInfo _core;
 		ClassInfo _plugin;
@@ -182,7 +169,7 @@ namespace monolm {
 		std::set<std::string/*, ImportMethod*/> _importMethods;
 		std::vector<std::unique_ptr<ExportMethod>> _exportMethods;
 
-		std::unordered_map<void*, plugify::Function> _functions;
+		std::unordered_map<void*, Function> _functions;
 
 		std::map<uint32_t, void*> _cachedFunctions;
 		std::map<void*, uint32_t> _cachedDelegates;

@@ -27,7 +27,7 @@ endif()
 # Plugify
 #
 set(PLUGIFY_BUILD_SHARED_LIB ON CACHE INTERNAL "")
-set(PLUGIFY_BUILD_FUNCTION ON CACHE INTERNAL "")
+set(PLUGIFY_BUILD_JIT ON CACHE INTERNAL "")
 if(LINUX)
     set(PLUGIFY_USE_STATIC_STDLIB ON CACHE INTERNAL "")
 endif()
@@ -37,11 +37,6 @@ add_subdirectory(external/plugify)
 # CPPtrace
 #
 include(cmake/cpptrace.cmake)
-
-#
-# Dyncall
-#
-include(cmake/dyncall.cmake)
 
 #
 # Mono
@@ -91,7 +86,7 @@ set(MONOLM_PCH_FILE "src/pch.h")
 
 add_library(${PROJECT_NAME} SHARED ${MONOLM_SOURCES})
 
-set(MONOLM_LINK_LIBRARIES plugify::plugify plugify::plugify-function asmjit::asmjit glaze::glaze cpptrace::cpptrace dyncall_s)
+set(MONOLM_LINK_LIBRARIES plugify::plugify plugify::plugify-jit asmjit::asmjit glaze::glaze cpptrace::cpptrace)
 
 if(NOT COMPILER_SUPPORTS_FORMAT)
     set(MONOLM_LINK_LIBRARIES ${MONOLM_LINK_LIBRARIES} fmt::fmt-header-only)
