@@ -92,7 +92,6 @@ if(NOT COMPILER_SUPPORTS_FORMAT)
     set(MONOLM_LINK_LIBRARIES ${MONOLM_LINK_LIBRARIES} fmt::fmt-header-only)
 endif()
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${dyncall_SOURCE_DIR})
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/mono/include)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${MONO_LIB} ${MONOLM_LINK_LIBRARIES})
