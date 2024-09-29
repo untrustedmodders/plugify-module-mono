@@ -338,7 +338,7 @@ namespace {
 
 	template<typename T>
 	void* AllocateMemory(ArgumentList& args) {
-		void* ptr = malloc(sizeof(T));
+		void* ptr = std::malloc(sizeof(T));
 		args.push_back(ptr);
 		return ptr;
 	}
@@ -346,7 +346,7 @@ namespace {
 	template<typename T>
 	void FreeMemory(void* ptr) {
 		reinterpret_cast<T*>(ptr)->~T();
-		free(ptr);
+		std::free(ptr);
 	}
 
 	void CallbackRefQueueCallback(void* callback) {
