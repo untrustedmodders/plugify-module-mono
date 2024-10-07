@@ -34,7 +34,7 @@ plugify install plugify-module-mono
 
     ```bash
     git clone https://github.com/untrustedmodders/plugify-module-mono.git
-    cd mono-lang-module
+    cd plugify-module-mono
     git submodule update --init --recursive
     ```
 
