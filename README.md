@@ -33,7 +33,7 @@ plugify install plugify-module-mono
 1. Clone this repository:
 
     ```bash
-    git clone https://github.com/untrustedmodders/mono-lang-module.git
+    git clone https://github.com/untrustedmodders/plugify-module-mono.git
     cd mono-lang-module
     git submodule update --init --recursive
     ```
